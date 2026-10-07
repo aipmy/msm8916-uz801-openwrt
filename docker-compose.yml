@@ -1,0 +1,15 @@
+services:
+  openwrt-builder:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: openwrt-msm8916-build
+    volumes:
+      - /Volumes/SSD-DATA/Projects/msm8916-uz801-openwrt:/home/builder/project
+      - openwrt_src:/home/builder/openwrt
+    working_dir: /home/builder/openwrt
+    stdin_open: true
+    tty: true
+
+volumes:
+  openwrt_src:
