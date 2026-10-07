@@ -1,39 +1,33 @@
 #!/usr/bin/env python3
 """
-MSM8916 OpenWrt Flasher & R&D Toolkit
-Target boards:
-  - jz01-45-v33  (JZxxx boards)
-  - thwc-uf896   (UF896 boards)
-  - thwc-ufi001c (UFIxxx boards)
-  - fy-mf800     (MF800 boards)
+MSM8916 OpenWrt Flasher & R&D Interactive Toolkit
 """
 
-import argparse
 import os
 import subprocess
 import sys
 from pathlib import Path
 
 SUPPORTED_BOARDS = {
-    "jz01-45-v33": {
-        "name": "JZ01-45-v33 (JZxxx Series)",
+    "1": {
+        "id": "jz01-45-v33",
+        "name": "JZ01-45-v33 (JZxxx Series - Current Focus)",
         "dtb": "msm8916-handsome-jz01-45-v33.dtb",
-        "default_offset": "0x80000000",
     },
-    "thwc-uf896": {
+    "2": {
+        "id": "thwc-uf896",
         "name": "THWC-UF896 (UF896 Series)",
         "dtb": "msm8916-thwc-uf896.dtb",
-        "default_offset": "0x80000000",
     },
-    "thwc-ufi001c": {
+    "3": {
+        "id": "thwc-ufi001c",
         "name": "THWC-UFI001C (UFIxxx Series)",
         "dtb": "msm8916-thwc-ufi001c.dtb",
-        "default_offset": "0x80000000",
     },
-    "fy-mf800": {
+    "4": {
+        "id": "fy-mf800",
         "name": "FY-MF800 (MF800 Series)",
         "dtb": "msm8916-fy-mf800.dtb",
-        "default_offset": "0x80000000",
     },
 }
 
@@ -44,101 +38,128 @@ PACKAGES_DIR = BASE_DIR / "packages"
 
 
 def run_cmd(cmd: list[str], check: bool = True) -> subprocess.CompletedProcess:
-    print(f"[RUN] {' '.join(cmd)}")
+    print(f"\n[EXEC] {' '.join(cmd)}")
     return subprocess.run(cmd, check=check)
 
 
 def check_fastboot() -> bool:
+    print("\n--- Cek Perangkat Fastboot ---")
     try:
         res = subprocess.run(["fastboot", "devices"], capture_output=True, text=True, check=True)
         devices = [line for line in res.stdout.strip().splitlines() if line.strip()]
         if not devices:
-            print("[WARN] No fastboot devices detected.")
+            print("[WARN] Tidak ada perangkat dalam mode fastboot terdeteksi.")
             return False
-        print(f"[OK] Found fastboot device(s):\n{res.stdout.strip()}")
+        for dev in devices:
+            print(f"[FOUND] {dev}")
         return True
     except FileNotFoundError:
-        print("[ERROR] 'fastboot' binary not found in PATH.")
+        print("[ERROR] 'fastboot' binary tidak ditemukan di sistem PATH.")
         return False
     except subprocess.CalledProcessError as e:
-        print(f"[ERROR] fastboot error: {e}")
+        print(f"[ERROR] fastboot command gagal: {e}")
         return False
 
 
-def cmd_list_boards(args: argparse.Namespace) -> None:
-    print("Supported MSM8916 Boards:")
-    for key, info in SUPPORTED_BOARDS.items():
-        print(f"  - {key:<14} : {info['name']} (DTB: {info['dtb']})")
+def select_board() -> dict:
+    print("\n=== Pilih Board Target ===")
+    for key, val in SUPPORTED_BOARDS.items():
+        print(f"[{key}] {val['name']}")
+    
+    choice = input("\nMasukkan nomor board [1]: ").strip() or "1"
+    selected = SUPPORTED_BOARDS.get(choice, SUPPORTED_BOARDS["1"])
+    print(f"-> Board terpilih: {selected['name']} ({selected['id']})")
+    return selected
 
 
-def cmd_backup_efs(args: argparse.Namespace) -> None:
-    print("[INFO] Backing up modem EFS partitions via fastboot/EDL...")
-    out_dir = BACKUP_DIR / "efs"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    partitions = ["modemst1", "modemst2", "fsg", "fsc"]
-    print(f"[INFO] Target partitions: {', '.join(partitions)}")
-    print(f"[INFO] Backup directory: {out_dir}")
-    print("[NOTE] Ensure device in fastboot/EDL mode.")
+def flash_openwrt(board_meta: dict) -> None:
+    board_id = board_meta["id"]
+    boot_img = FIRMWARE_DIR / f"openwrt-{board_id}-boot.img"
+    rootfs_img = FIRMWARE_DIR / "openwrt-rootfs.img"
 
+    print(f"\nTarget: {board_meta['name']}")
+    print(f"Boot image  : {boot_img} ({'Ditemukan' if boot_img.exists() else 'TIDAK DITEMUKAN'})")
+    print(f"Rootfs image: {rootfs_img} ({'Ditemukan' if rootfs_img.exists() else 'TIDAK DITEMUKAN'})")
 
-def cmd_flash_openwrt(args: argparse.Namespace) -> None:
-    board_id = args.board
-    if board_id not in SUPPORTED_BOARDS:
-        print(f"[ERROR] Unsupported board: {board_id}")
-        sys.exit(1)
+    if not check_fastboot():
+        input("\nTekan Enter untuk kembali ke menu...")
+        return
 
-    board_meta = SUPPORTED_BOARDS[board_id]
-    print(f"[INFO] Target Board: {board_meta['name']}")
+    confirm = input("\nLanjutkan proses flash fastboot? (y/N): ").strip().lower()
+    if confirm != "y":
+        print("[ABORT] Flash dibatalkan.")
+        return
 
-    boot_img = Path(args.boot) if args.boot else (FIRMWARE_DIR / f"openwrt-{board_id}-boot.img")
-    rootfs_img = Path(args.rootfs) if args.rootfs else (FIRMWARE_DIR / "openwrt-rootfs.img")
+    if not boot_img.exists():
+        print(f"[ERROR] Image boot tidak ditemukan di: {boot_img}")
+        print("Silakan taruh file boot.img yang sesuai di folder firmware/ terlebih dahulu.")
+        input("\nTekan Enter untuk kembali ke menu...")
+        return
 
-    print(f"[INFO] Boot image  : {boot_img}")
-    print(f"[INFO] Rootfs image: {rootfs_img}")
-
-    if not args.dry_run:
-        if not check_fastboot():
-            sys.exit(1)
-        if boot_img.exists():
-            run_cmd(["fastboot", "flash", "boot", str(boot_img)])
-        else:
-            print(f"[ERROR] File not found: {boot_img}")
-            sys.exit(1)
-
+    try:
+        run_cmd(["fastboot", "flash", "boot", str(boot_img)])
         if rootfs_img.exists():
             run_cmd(["fastboot", "flash", "rootfs", str(rootfs_img)])
         else:
-            print(f"[WARN] File not found: {rootfs_img}. Skipping rootfs flash.")
-        print("[OK] Flashing completed. Rebooting...")
+            print("[INFO] rootfs image tidak ditemukan di firmware/, hanya flash boot.")
         run_cmd(["fastboot", "reboot"])
-    else:
-        print("[DRY-RUN] Verification successful. Fastboot commands not sent.")
+        print("\n[SUCCESS] Flashing selesai dan perangkat direboot!")
+    except subprocess.CalledProcessError as e:
+        print(f"[FAILED] Error saat flashing: {e}")
+
+    input("\nTekan Enter untuk kembali ke menu...")
+
+
+def backup_efs() -> None:
+    print("\n=== Backup EFS Partitions ===")
+    out_dir = BACKUP_DIR / "efs"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    partitions = ["modemst1", "modemst2", "fsg", "fsc"]
+    print(f"Target folder: {out_dir}")
+    print(f"Partisi      : {', '.join(partitions)}")
+    print("[INFO] Backup via EDL/Fastboot command siap.")
+    input("\nTekan Enter untuk kembali ke menu...")
+
+
+def interactive_menu() -> None:
+    while True:
+        print("\n" + "=" * 50)
+        print("    MSM8916 OpenWrt Flasher & R&D Toolkit")
+        print("=" * 50)
+        print("[1] Cek Perangkat Fastboot")
+        print("[2] Flash OpenWrt (Pilih Board - Default: JZ01-45-v33)")
+        print("[3] Backup EFS Partisi (modemst1, modemst2, fsg, fsc)")
+        print("[4] List File di Folder Firmware & Backups")
+        print("[0] Keluar")
+        print("-" * 50)
+
+        choice = input("Pilih menu [1-4, 0]: ").strip()
+
+        if choice == "1":
+            check_fastboot()
+            input("\nTekan Enter untuk kembali ke menu...")
+        elif choice == "2":
+            board = select_board()
+            flash_openwrt(board)
+        elif choice == "3":
+            backup_efs()
+        elif choice == "4":
+            print("\n--- Isi Folder Firmware ---")
+            for f in FIRMWARE_DIR.iterdir():
+                print(f"  {f.name}")
+            print("\n--- Isi Folder Backups ---")
+            for f in BACKUP_DIR.iterdir():
+                print(f"  {f.name}")
+            input("\nTekan Enter untuk kembali ke menu...")
+        elif choice == "0":
+            print("Keluar.")
+            sys.exit(0)
+        else:
+            print("Pilihan tidak valid.")
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="MSM8916 OpenWrt Flasher & R&D Toolkit")
-    subparsers = parser.add_subparsers(dest="command", required=True)
-
-    # list-boards
-    subparsers.add_parser("list-boards", help="List supported MSM8916 boards")
-
-    # flash
-    flash_p = subparsers.add_parser("flash", help="Flash OpenWrt to target board")
-    flash_p.add_argument("--board", required=True, choices=list(SUPPORTED_BOARDS.keys()), help="Target board ID")
-    flash_p.add_argument("--boot", help="Path to custom openwrt boot.img")
-    flash_p.add_argument("--rootfs", help="Path to custom rootfs image")
-    flash_p.add_argument("--dry-run", action="store_true", help="Simulate without executing fastboot")
-
-    # backup
-    subparsers.add_parser("backup-efs", help="Backup modemst1, modemst2, fsg, fsc")
-
-    args = parser.parse_args()
-    if args.command == "list-boards":
-        cmd_list_boards(args)
-    elif args.command == "flash":
-        cmd_flash_openwrt(args)
-    elif args.command == "backup-efs":
-        cmd_backup_efs(args)
+    interactive_menu()
 
 
 if __name__ == "__main__":
