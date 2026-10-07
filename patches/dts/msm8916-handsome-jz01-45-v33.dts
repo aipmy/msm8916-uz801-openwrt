@@ -21,26 +21,26 @@
 &led_r {
 	color = <LED_COLOR_ID_RED>;
 	function = LED_FUNCTION_POWER;
-	gpios = <&tlmm 6 GPIO_ACTIVE_HIGH>;
-	default-state = "on";
+	gpios = <&tlmm 25 GPIO_ACTIVE_HIGH>;
+	default-state = "off";
 };
 
 &led_g {
 	color = <LED_COLOR_ID_GREEN>;
 	function = LED_FUNCTION_WAN;
-	gpios = <&tlmm 7 GPIO_ACTIVE_HIGH>;
-	default-state = "off";
+	gpios = <&tlmm 6 GPIO_ACTIVE_HIGH>;
+	default-state = "on";
 };
 
 &led_b {
 	color = <LED_COLOR_ID_BLUE>;
 	function = LED_FUNCTION_WLAN;
-	gpios = <&tlmm 8 GPIO_ACTIVE_HIGH>;
+	gpios = <&tlmm 7 GPIO_ACTIVE_HIGH>;
 	default-state = "off";
 };
 
 &gpio_leds_default {
-	pins = "gpio6", "gpio7", "gpio8";
+	pins = "gpio25", "gpio6", "gpio7";
 };
 
 &tlmm {
@@ -59,11 +59,11 @@
 			output-high;
 		};
 
-		sim-en-pins {
-			pins = "gpio20";
+		sim-detect-pins {
+			pins = "gpio52";
 			function = "gpio";
 			bias-disable;
-			output-low;
+			output-high;
 		};
 	};
 };
