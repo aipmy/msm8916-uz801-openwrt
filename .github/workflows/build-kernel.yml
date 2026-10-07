@@ -51,6 +51,12 @@ jobs:
           cp patches/890-wwan-qcom-bam-dmux-fix-rx-tx-stats.patch openwrt/target/linux/msm89xx/patches-6.12/ || \
           cp patches/890-wwan-qcom-bam-dmux-fix-rx-tx-stats.patch openwrt/target/linux/msm89xx/patches/
 
+          # 2. Inject Custom Kernel Driver: LED SIM Card Trigger (ledtrig-sim.c)
+          mkdir -p openwrt/target/linux/msm89xx/files/drivers/leds/trigger/
+          cp patches/kernel/ledtrig-sim.c openwrt/target/linux/msm89xx/files/drivers/leds/trigger/
+          cp patches/891-drivers-leds-add-simcard-trigger.patch openwrt/target/linux/msm89xx/patches-6.12/ || \
+          cp patches/891-drivers-leds-add-simcard-trigger.patch openwrt/target/linux/msm89xx/patches/
+
           # 2. Inject Clean Device Tree JZ01-45-V33
           cp patches/dts/msm8916-handsome-jz01-45-v33.dts openwrt/target/linux/msm89xx/files/arch/arm64/boot/dts/qcom/ || \
           mkdir -p openwrt/target/linux/msm89xx/files/arch/arm64/boot/dts/qcom/ && cp patches/dts/msm8916-handsome-jz01-45-v33.dts openwrt/target/linux/msm89xx/files/arch/arm64/boot/dts/qcom/
