@@ -74,6 +74,8 @@ jobs:
           echo "CONFIG_PACKAGE_kmod-ledtrig-timer=y" >> .config
           echo "CONFIG_PACKAGE_htop=y" >> .config
           echo "CONFIG_PACKAGE_iperf3=y" >> .config
+          echo "CONFIG_PACKAGE_zram-swap=y" >> .config
+          echo "CONFIG_PACKAGE_kmod-zram=y" >> .config
           make defconfig
           make download -j$(nproc)
 
