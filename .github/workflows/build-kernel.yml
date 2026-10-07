@@ -1,0 +1,87 @@
+name: Build OpenWrt MSM8916 (Clean JZ01-45 Kernel & LED Netdev Fix)
+
+on:
+  workflow_dispatch:
+    inputs:
+      openwrt_tag:
+        description: 'OpenWrt version tag (default: latest v25.12.x)'
+        required: false
+        default: ''
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Build Environment
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          sudo apt-get -qq update
+          sudo apt-get -qq install -y build-essential clang flex bison g++ gawk gcc-multilib gettext git libncurses-dev libssl-dev python3-setuptools rsync unzip zlib1g-dev device-tree-compiler mkbootimg
+
+      - name: Resolve OpenWrt Tag
+        id: resolve
+        run: |
+          if [ -n "${{ inputs.openwrt_tag }}" ]; then
+            echo "tag=${{ inputs.openwrt_tag }}" >> $GITHUB_OUTPUT
+          else
+            TAG=$(git ls-remote --tags https://git.openwrt.org/openwrt/openwrt.git 'v25.12.*' | grep -oP 'v25\.12\.\d+$' | sort -V | tail -1)
+            [ -z "$TAG" ] && TAG="v25.12.5"
+            echo "tag=$TAG" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Clone OpenWrt Source
+        run: |
+          git clone https://git.openwrt.org/openwrt/openwrt.git openwrt
+          git -C openwrt checkout ${{ steps.resolve.outputs.tag }}
+
+      - name: Setup MSM8916 Target & Apply Kernel Fixes
+        run: |
+          git clone https://github.com/hkfuertes/msm8916-openwrt.git upstream-msm
+          chmod +x upstream-msm/apply_patches.sh
+          ./upstream-msm/apply_patches.sh openwrt
+          mv upstream-msm/msm89xx openwrt/target/linux/msm89xx
+          mv upstream-msm/packages openwrt/package/msm8916
+
+          # 1. Inject Kernel Driver Bugfix: BAM-DMUX RX/TX 0 Bytes
+          cp patches/890-wwan-qcom-bam-dmux-fix-rx-tx-stats.patch openwrt/target/linux/msm89xx/patches-6.12/ || \
+          cp patches/890-wwan-qcom-bam-dmux-fix-rx-tx-stats.patch openwrt/target/linux/msm89xx/patches/
+
+          # 2. Inject Clean Device Tree JZ01-45-V33
+          cp patches/dts/msm8916-handsome-jz01-45-v33.dts openwrt/target/linux/msm89xx/files/arch/arm64/boot/dts/qcom/ || \
+          mkdir -p openwrt/target/linux/msm89xx/files/arch/arm64/boot/dts/qcom/ && cp patches/dts/msm8916-handsome-jz01-45-v33.dts openwrt/target/linux/msm89xx/files/arch/arm64/boot/dts/qcom/
+
+          # 3. Inject Kernel Config LED Triggers
+          cat configs/kernel-led-triggers.conf >> openwrt/target/linux/msm89xx/config-6.12
+
+          # 4. Inject Rootfs Overlays (Status Monitor Daemon)
+          mkdir -p openwrt/target/linux/msm89xx/base-files/
+          cp -a rootfs-overlay/. openwrt/target/linux/msm89xx/base-files/
+          chmod +x openwrt/target/linux/msm89xx/base-files/usr/bin/modem-led-monitor.sh
+          chmod +x openwrt/target/linux/msm89xx/base-files/etc/init.d/modem-led-monitor
+
+      - name: Configure and Download Feeds
+        run: |
+          cd openwrt
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+          cp ../upstream-msm/diffconfig_uz801 .config
+          echo "CONFIG_PACKAGE_kmod-ledtrig-netdev=y" >> .config
+          echo "CONFIG_PACKAGE_kmod-ledtrig-timer=y" >> .config
+          make defconfig
+          make download -j$(nproc)
+
+      - name: Compile OpenWrt Kernel & Images
+        run: |
+          cd openwrt
+          make -j$(nproc) V=s
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: openwrt-jz01-45-images
+          path: openwrt/bin/targets/msm89xx/msm8916/
