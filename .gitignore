@@ -1,0 +1,34 @@
+# Byte-compiled / optimized / binary files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Heavy binaries & dumps (backup & firmware binaries should not be committed to git directly)
+backups/*.bin
+backups/*.img
+backups/*.qcn
+backups/efs/
+firmware/*.img
+firmware/*.bin
+firmware/*.mbn
+packages/*.apk
+packages/*.ipk
+!firmware/.gitkeep
+!packages/.gitkeep
+!backups/.gitkeep
+
+# Logs & temp
+*.log
+tmp/
+*.swp
