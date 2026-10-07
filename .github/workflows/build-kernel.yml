@@ -58,12 +58,6 @@ jobs:
           # 3. Inject Kernel Config LED Triggers
           cat configs/kernel-led-triggers.conf >> openwrt/target/linux/msm89xx/config-6.12
 
-          # 4. Inject Rootfs Overlays (Status Monitor Daemon)
-          mkdir -p openwrt/target/linux/msm89xx/base-files/
-          cp -a rootfs-overlay/. openwrt/target/linux/msm89xx/base-files/
-          chmod +x openwrt/target/linux/msm89xx/base-files/usr/bin/modem-led-monitor.sh
-          chmod +x openwrt/target/linux/msm89xx/base-files/etc/init.d/modem-led-monitor
-
       - name: Configure and Download Feeds
         run: |
           cd openwrt
