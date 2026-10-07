@@ -72,6 +72,8 @@ jobs:
           cp ../upstream-msm/diffconfig_uz801 .config
           echo "CONFIG_PACKAGE_kmod-ledtrig-netdev=y" >> .config
           echo "CONFIG_PACKAGE_kmod-ledtrig-timer=y" >> .config
+          echo "CONFIG_PACKAGE_htop=y" >> .config
+          echo "CONFIG_PACKAGE_iperf3=y" >> .config
           make defconfig
           make download -j$(nproc)
 
