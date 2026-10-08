@@ -138,6 +138,26 @@ The menu provides:
 
 ---
 
+## 📦 Built-in Packages & Features
+
+Our standard firmware image is pre-loaded with essential networking, monitoring, and modem utilities out of the box:
+
+### 1. Cellular & Modem Stack
+- **ModemManager & libqmi / libmbim**: Automatic connection management for Qualcomm Hexagon QDSP6 modem subsystem (`wwan0`).
+- **5G/4G Modem Status Dashboard**: Real-time signal strength (RSRP, RSRQ, RSSI), cell ID, carrier bands, and SMS inbox manager.
+- **BAM-DMUX Traffic Accounting**: In-tree kernel counter fix for real-time RX/TX data metrics.
+
+### 2. Networking & Diagnostics
+- **LuCI Web Interface**: Modern OpenWrt web UI with Bootstrap & Argon mobile-responsive support.
+- **kmod-ledtrig-netdev & ledtrig-sim**: Kernel-level hardware LED triggers configurable directly via **System -> LED Configuration**.
+- **Diagnostic Tools**: `curl`, `htop`, `iperf3`, `tcpdump`, `ethtool`.
+
+### 3. Memory & System Optimization
+- **zram-swap & kmod-zram**: In-RAM compressed swap with LZ4/ZSTD algorithm (crucial for smooth multitasking on 384MB - 512MB RAM).
+- **USB Gadget Support**: NCM / RNDIS plug-and-play USB Ethernet tethering for host PC/laptop.
+
+---
+
 ## 📜 License & Credits
 
 - Upstream OpenWrt: GPL-2.0
