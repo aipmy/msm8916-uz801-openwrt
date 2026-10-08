@@ -28,18 +28,6 @@ define Device/msm8916
   ARTIFACT/firmware.zip := generate-firmware
 endef
 
-define Device/yiming-uz801v3
-  $(Device/msm8916)
-  DEVICE_VENDOR := YiMing
-  DEVICE_MODEL := uz801v3
-  SUPPORTED_DEVICES := yiming,uz801-v3
-  FILESYSTEMS := squashfs
-  DEVICE_PACKAGES := wpad-basic-mbedtls rmtfs uci-usb-gadget \
-                     block-mount f2fs-tools \
-                     msm-firmware-dumper
-endef
-TARGET_DEVICES += yiming-uz801v3
-
 define Device/generic-uf02
   $(Device/msm8916)
   DEVICE_VENDOR := Generic
@@ -48,20 +36,35 @@ define Device/generic-uf02
   FILESYSTEMS := squashfs
   DEVICE_PACKAGES := wpad-basic-mbedtls rmtfs uci-usb-gadget \
                      block-mount f2fs-tools \
-                     msm-firmware-dumper
+                     msm-firmware-dumper luci-theme-proton2025 \
+                     luci-app-5gmodem sms-tool comgt mbim-utils coreutils-stty
 endef
 TARGET_DEVICES += generic-uf02
+
+define Device/yiming-uz801v3
+  $(Device/msm8916)
+  DEVICE_VENDOR := YiMing
+  DEVICE_MODEL := uz801v3
+  SUPPORTED_DEVICES := yiming,uz801-v3
+  FILESYSTEMS := squashfs
+  DEVICE_PACKAGES := wpad-basic-mbedtls rmtfs uci-usb-gadget \
+                     block-mount f2fs-tools \
+                     msm-firmware-dumper luci-theme-proton2025 \
+                     luci-app-5gmodem sms-tool comgt mbim-utils coreutils-stty
+endef
+TARGET_DEVICES += yiming-uz801v3
 
 define Device/jz01-45-v33
   $(Device/msm8916)
   DEVICE_VENDOR := Generic
   DEVICE_MODEL := JZ01-45-V33
-  DEVICE_DTS := qcom/msm8916-handsome-jz01-45-v33
+  DEVICE_DTS := msm8916-handsome-jz01-45-v33
   SUPPORTED_DEVICES := jz01-45-v33 generic,jz01-45-v33
   FILESYSTEMS := squashfs
   DEVICE_PACKAGES := wpad-basic-mbedtls rmtfs uci-usb-gadget \
                      block-mount f2fs-tools \
-                     msm-firmware-dumper
+                     msm-firmware-dumper luci-theme-proton2025 \
+                     luci-app-5gmodem sms-tool comgt mbim-utils coreutils-stty
 endef
 TARGET_DEVICES += jz01-45-v33
 

@@ -1,0 +1,69 @@
+# Quectel EM06
+
+. "$RES/modem/usb/_quectel_common"
+
+QTEMP=$(sms_tool -d $DEVICE at "AT+QTEMP" | grep cpuss-usr)
+QTEMPEXTRACTED=$(echo "${QTEMP}" | awk -F[,:] '/^\+QTEMP/ {t=$2*1;if($3*1>t)t=$3*1;if($4*1>t)t=$4*1;printf "%d", t}')
+[ -n "${QTEMP}" ] && TEMP="${QTEMPEXTRACTED} &deg;C"
+
+O=$(sms_tool -d $DEVICE at "at+qnwinfo;+qeng=\"servingcell\";+qspn")
+
+T=$(echo "$O" | awk -F[,:] '/^\+QNWINFO/ {print $2"/"$4}' | xargs)
+if [ -n "$T" ]; then
+	if [ "x$MODE_NUM" = "x7" ]; then
+		B=$(echo $T | sed 's/.*LTE BAND \(.*\)/\1/')
+		MODE="LTE $(band4g ${B})"
+		MAINCUT="$(band4g ${B})"
+	fi
+fi
+
+# Полосы - отдельным полем BANDWIDTH, не внутри PBAND: легаси-формат
+# «Bx DL: @.. UL: @..» ломал разрез диапазон/полоса во фронте (caSplitBand
+# режет по « @»; живой случай EP06-E 19.08.2026, тот же формат был здесь).
+# SINR уже в дБ (см. modem/usb/2c7c0306: по живым ответам QENG поле 0..25 и
+# растёт с RSRP; «x*0.2-20» давало -15..-19 дБ на отличном сигнале).
+_qc_qeng_bw
+
+# SPN - поле 4 (см. modem/usb/2c7c0306: поле 2 у старых прошивок «000 000»).
+_qc_spn4
+
+if [ "x$MODE_NUM" = "x7" ]; then
+	O=$(sms_tool -d $DEVICE at "AT+QCAINFO")
+	
+	T=$(echo "$O" | awk -F[,] '/^\+QCAINFO: "scc"/{print $4}' | xargs)
+	if [ -n "$T" ]; then
+		B=$(echo $T | sed 's/.*LTE BAND \(.*\)/\1/')
+		T=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "scc"/ {print $4}')
+		_qc_cbw T1 "$T" "?"
+		MODE="${MODE/LTE/LTE_A} / $(band4g ${B})"
+		S1BAND="$(band4g ${B}) @$T1 MHz"
+
+		T=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "scc"/ {print $7}')
+		S1PCI="$T"
+		T=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "scc"/ {print $3}')
+		S1EARFCN="$T"
+		T=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "scc"/ {print $10}')
+		S1RSSI=$T
+		T=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "scc"/ {print $8}')
+		S1RSRP=$T
+		T=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "scc"/ {print $9}')
+		S1RSRQ=$T
+		T=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "scc"/ {v=$11; gsub(/[^0-9-]/,"",v); if(v ~ /^-?[0-9]+$/) print v; exit}')
+		S1SINR=$T
+	fi
+fi
+
+_qc_neighbours
+
+MODE=$(echo $MODE | sed 's,/,+,' | sed 's, / \(B[0-9]\), + \1,g' | sed "s/LTE_A/LTE-A | /g")
+
+# Modem
+_qc_ati
+
+_qc_ids
+
+_PV_V=$(cat "/sys/bus/usb/devices/$_POLL_AM/idVendor" 2>/dev/null)
+_PV_P=$(cat "/sys/bus/usb/devices/$_POLL_AM/idProduct" 2>/dev/null)
+_qc_proto "Vendor=${_PV_V:-2c7c} ProdID=${_PV_P:-030b}" 1220
+
+. "$RES/modem/usb/_quectel_qrsrp"

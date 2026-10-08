@@ -1,0 +1,440 @@
+#!/bin/sh
+#
+# Restart the modem. Two modes:
+#
+#   soft (default): cycle the radio only, AT+CFUN=4 -> AT+CFUN=1. Forces a fresh
+#     network attach/reconnect WITHOUT re-enumerating USB, so ModemManager keeps
+#     its MBIM port classification and the data channel is only briefly
+#     interrupted. Use this for "re-register / apply bands".
+#
+#   hard: full modem reset, AT+CFUN=1,1. The modem reboots and re-enumerates on
+#     the USB bus. Takes longer and, on MM-managed MBIM modems, MM may briefly
+#     misclassify the data port after re-enumeration (connection can drop for a
+#     minute). Use this when the soft restart is not enough (modem wedged).
+#
+# Usage: reboot_modem.sh [soft|hard] [at_port]
+#   For backwards compatibility a first argument of /dev/... is treated as the
+#   port and the mode defaults to soft.
+#
+
+MODE="$1"
+PORT="$2"
+case "$MODE" in
+	soft|hard|power|haspower|usbpower|hasusbpower) ;;
+	/dev/*)    PORT="$MODE"; MODE="soft" ;;   # старый вызов: reboot_modem.sh <port>
+	*)         MODE="soft" ;;
+esac
+
+# Аппаратная перезагрузка модема по питанию через GPIO платы (например
+# modem_power у Huasifei WH3000; у части плат - 4g/5g1/5g2). Работает независимо
+# от AT: снимаем питание слота (значение, обратное текущему), пауза, возвращаем
+# прежнее - полярность у плат разная (у KuWfi T960 modem_power=1 это «подано», у
+# WH3000 наоборот); интерфейс
+# поднимается ~1 мин. На WH3000 это питает ТОЛЬКО M.2-слот (USB-модем не трогает).
+# Список известных имён GPIO сброса/питания модема (по target/.../03_gpio_switches).
+# modem_reset - ПО ПЛАТАМ. У Teltonika RUT2xx/RUT9xx это настоящая reset-линия
+# модуля (HC595) и кнопка обязана работать. А на Almond 3S тот же самый
+# экспорт - #PERST слота mini-PCIe: модем работает по USB-линиям и PERST
+# игнорирует (проверено вживую: 5 с LOW - ноль реакции). Поэтому modem_reset
+# остаётся в списке, но на Almond выкидывается гвардом по board_name ниже -
+# там haspower пустеет и кнопка падает на usbpower (disable downstream-порта;
+# настоящего per-port VBUS у MT7621 xHCI нет, это самый жёсткий сброс).
+# (про полярность: GPIO33 active_low - полярность разруливает ядро,
+# sysfs-value логический) сбрасывается той же
+# последовательностью 1->пауза->0, что и modem_power, поэтому в общем списке.
+POWER_GPIOS="modem_power modem_reset 4g 5g1 5g2"
+case "$(cat /tmp/sysinfo/board_name 2>/dev/null)" in
+	securifi,almond-3s|securifi,almond3s) POWER_GPIOS="modem_power 4g 5g1 5g2" ;;
+esac
+first_power_gpio() {
+	for _g in $POWER_GPIOS; do
+		[ -e "/sys/class/gpio/$_g/value" ] && { echo "$_g"; return 0; }
+	done
+	return 1
+}
+
+# --- Снятие питания с USB-порта модема ---------------------------------------
+#
+# Последний рубеж, когда не помогает НИЧЕГО из AT. Наблюдалось вживую на FM350:
+# после AT+CFUN=1,1 модем ушёл в переподключение USB и завис - CSQ 99,99 (сигнала
+# нет), регистрации нет, порт то отвечает, то молчит. Ни CFUN=4/1, ни COPS=0,
+# ни повторный CFUN=1,1 его не вернули: AT-канал жив, а радио мертво.
+#
+# GPIO-режим power сюда не годится: на многих платах (в т.ч. Huasifei WH3000) он
+# питает ТОЛЬКО M.2-слот и USB-модема не касается.
+#
+# Три способа по убыванию силы - берём первый доступный:
+#   1. <хаб>/<порт>/disable - отключение порта хабом. Самый жёсткий: на хабах с
+#      управлением питанием снимает VBUS, то есть настоящее обесточивание.
+#   2. authorized - деавторизация устройства. Питание остаётся, но ядро
+#      полностью переустанавливает устройство.
+#   3. unbind/bind драйвера usb - самый мягкий, на зависшем модеме помогает реже.
+_usb_port_dir() {   # $1 - usb-путь модема (напр. 2-1.4)
+	case "$1" in
+		*.*)
+			_hub="${1%.*}"                     # 2-1.4 -> 2-1
+			_pn="${1##*.}"                     # -> 4
+			echo "/sys/bus/usb/devices/$_hub/$_hub:1.0/$_hub-port$_pn"
+			;;
+		*-*)
+			# Модем воткнут прямо в корневой хаб: 2-1 -> usb2, порт 1
+			_bus="${1%%-*}"; _pn="${1##*-}"
+			echo "/sys/bus/usb/devices/usb$_bus/$_bus-0:1.0/usb$_bus-port$_pn"
+			;;
+	esac
+}
+
+usb_power_method() {   # $1 - usb-путь; печатает доступный способ или пусто
+	_pd=$(_usb_port_dir "$1")
+	[ -n "$_pd" ] && [ -w "$_pd/disable" ] && { echo "disable"; return 0; }
+	[ -w "/sys/bus/usb/devices/$1/authorized" ] && { echo "authorized"; return 0; }
+	[ -w /sys/bus/usb/drivers/usb/unbind ] && [ -e "/sys/bus/usb/devices/$1" ] \
+		&& { echo "rebind"; return 0; }
+	return 1
+}
+
+if [ "$MODE" = hasusbpower ]; then
+	# наличие кнопки: путь берём из активного модема, если не задан явно
+	_p="$PORT"
+	[ -n "$_p" ] || _p=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+	echo "{\"path\":\"$_p\",\"method\":\"$(usb_power_method "$_p" 2>/dev/null)\"}"
+	exit 0
+fi
+
+if [ "$MODE" = usbpower ]; then
+	_p="$PORT"
+	[ -n "$_p" ] || _p=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+	[ -n "$_p" ] || { echo '{"success":false,"error":"no modem path"}'; exit 0; }
+	_m=$(usb_power_method "$_p") || { echo '{"success":false,"error":"no usb power control"}'; exit 0; }
+	_pd=$(_usb_port_dir "$_p")
+	# В фоне с отвязкой дескрипторов НА ПОДОБОЛОЧКЕ - иначе rpcd ждёт EOF и
+	# упирается в свой 30-секундный таймаут (та же грабля, что в ветке power).
+	(
+		case "$_m" in
+			disable)
+				_pp=$(readlink -f "$_pd/peer" 2>/dev/null)
+				[ -n "$_pp" ] && [ -w "$_pp/disable" ] || _pp=""
+				_pfirst="$_pd"; _plast="$_pp"
+				if [ -n "$_pp" ]; then
+					_pbus=$(basename "$(dirname "$(dirname "$_pd")")")
+					case "$_pbus" in usb*) ;; *) _pbus="usb${_pbus%%-*}" ;; esac
+					[ "$(cat "/sys/bus/usb/devices/$_pbus/speed" 2>/dev/null)" -ge 5000 ] 2>/dev/null \
+						|| { _pfirst="$_pp"; _plast="$_pd"; }
+					echo 1 > "$_pp/disable" 2>/dev/null
+				fi
+				echo 1 > "$_pd/disable" 2>/dev/null
+				sleep 6
+				echo 0 > "$_pfirst/disable" 2>/dev/null
+				if [ -n "$_plast" ]; then
+					sleep 2
+					echo 0 > "$_plast/disable" 2>/dev/null
+				fi
+				# Модем мог не вернуться на шину (отчёт #25: порт корневого
+				# хаба, «device descriptor read -110» до сброса контроллера).
+				# Проверяем, повторно снимаем disable и пишем в журнал громко.
+				_up_n=0
+				while [ "$_up_n" -lt 40 ] && [ ! -e "/sys/bus/usb/devices/$_p" ]; do
+					sleep 1; _up_n=$((_up_n + 1))
+				done
+				if [ ! -e "/sys/bus/usb/devices/$_p" ]; then
+					echo 0 > "$_pd/disable" 2>/dev/null
+					[ -n "$_pp" ] && echo 0 > "$_pp/disable" 2>/dev/null
+					logger -p daemon.err -t 5gmodem "usbpower: $_p did NOT come back after port disable - disable=$(cat "$_pd/disable" 2>/dev/null); a USB controller reset or reboot may be needed"
+				fi
+				;;
+			authorized)
+				echo 0 > "/sys/bus/usb/devices/$_p/authorized" 2>/dev/null
+				sleep 6
+				echo 1 > "/sys/bus/usb/devices/$_p/authorized" 2>/dev/null
+				;;
+			rebind)
+				echo "$_p" > /sys/bus/usb/drivers/usb/unbind 2>/dev/null
+				sleep 6
+				echo "$_p" > /sys/bus/usb/drivers/usb/bind 2>/dev/null
+				;;
+		esac
+		logger -t 5gmodem "usbpower: $_p power-cycled ($_m)"
+		# Порты после переподключения переименовываются - закрепляем заново.
+		sleep 20
+		/usr/share/5gmodem/modemswitch.sh resolve >/dev/null 2>&1
+		# ПЕРЕДОЗВОН ОБЯЗАТЕЛЕН. После переэнумерации сессия данных мертва, но
+		# netifd этого НЕ видит (up=true при netdev DOWN): у kernel-прото нет
+		# keepalive, и линк оставался трупом до ручного ifup - живой случай
+		# 15.08.2026 на стенде (qmiraw, wwan0 DOWN 100 минут, сторож увёл
+		# трафик на Wi-Fi). Поднимаем интерфейс модема сами.
+		_ifn=$(uci -q get "5gmodem.m_$(echo "$_p" | sed 's/[^A-Za-z0-9]/_/g').network")
+		[ -n "$_ifn" ] || [ "$_p" != "$(uci -q get 5gmodem.@5gmodem[0].active_modem)" ] \
+			|| _ifn=$(uci -q get 5gmodem.@5gmodem[0].network)
+		if [ -n "$_ifn" ]; then
+			sleep 5
+			ifdown "$_ifn" >/dev/null 2>&1
+			sleep 2
+			ifup "$_ifn" >/dev/null 2>&1
+		fi
+	) >/dev/null 2>&1 </dev/null &
+	echo "{\"success\":true,\"mode\":\"usbpower\",\"method\":\"$_m\",\"path\":\"$_p\"}"
+	sleep 1
+	exit 0
+fi
+
+if [ "$MODE" = haspower ]; then
+	# наличие кнопки: отдаём имя первого доступного GPIO питания (или пусто)
+	echo "{\"gpio\":\"$(first_power_gpio)\"}"
+	exit 0
+fi
+
+if [ "$MODE" = power ]; then
+	# 2-й аргумент можно использовать как явное имя GPIO; иначе - первый доступный
+	G="$PORT"; [ -n "$G" ] || G=$(first_power_gpio)
+	GP="/sys/class/gpio/$G/value"
+	[ -n "$G" ] && [ -e "$GP" ] || { echo '{"success":false,"error":"no modem power gpio"}'; exit 0; }
+	# В фоне: снять питание, пауза 5с, вернуть.
+	# ВАЖНО - >/dev/null 2>&1 </dev/null НА САМОЙ подоболочке, а не только на
+	# командах внутри. Скрипт вызывается через rpcd (LuCI fs.exec), а тот ждёт не
+	# только выхода процесса, но и EOF на пайпах stdout/stderr. Фоновая
+	# подоболочка наследовала эти пайпы и держала их открытыми -> rpcd упирался в
+	# свой 30-секундный таймаут, и UI показывал «ошибка XHR», хотя питание уже
+	# было переключено (ровно этот симптом и наблюдался). С отвязанными
+	# дескрипторами ubus file exec отвечает мгновенно (проверено на роутере).
+	_pg_on=$(cat "$GP" 2>/dev/null)
+	case "$_pg_on" in 0|1) ;; *) _pg_on=0 ;; esac
+	_pg_off=$((1 - _pg_on))
+	_pg_path=$(uci -q get 5gmodem.@5gmodem[0].active_modem 2>/dev/null)
+	_pg_was=0
+	_pg_dn=""
+	[ -n "$_pg_path" ] && [ -e "/sys/bus/usb/devices/$_pg_path" ] && {
+		_pg_was=1
+		_pg_dn=$(cat "/sys/bus/usb/devices/$_pg_path/devnum" 2>/dev/null)
+	}
+	_pg_back() {
+		[ -e "/sys/bus/usb/devices/$_pg_path" ] || return 1
+		[ "$(cat "/sys/bus/usb/devices/$_pg_path/devnum" 2>/dev/null)" != "$_pg_dn" ]
+	}
+	_pg_kick() {
+		_pg_pd=$(_usb_port_dir "$_pg_path")
+		[ -w "$_pg_pd/disable" ] || return 1
+		_pg_pp=$(readlink -f "$_pg_pd/peer" 2>/dev/null)
+		[ -n "$_pg_pp" ] && echo 1 > "$_pg_pp/disable" 2>/dev/null
+		echo 1 > "$_pg_pd/disable" 2>/dev/null
+		sleep 3
+		[ -n "$_pg_pp" ] && echo 0 > "$_pg_pp/disable" 2>/dev/null
+		sleep 2
+		echo 0 > "$_pg_pd/disable" 2>/dev/null
+		return 0
+	}
+	_pg_wait() {
+		_pg_w=0
+		while [ "$_pg_w" -lt "$1" ]; do
+			_pg_back && return 0
+			sleep 1; _pg_w=$((_pg_w + 1))
+		done
+		_pg_back
+	}
+	(
+		echo "$_pg_off" > "$GP" 2>/dev/null
+		sleep 5
+		echo "$_pg_on" > "$GP" 2>/dev/null
+		[ -n "$_pg_path" ] || exit 0
+		if [ "$_pg_was" = 1 ]; then
+			_pg_wait 60 && exit 0
+			if _pg_kick; then
+				logger -t 5gmodem "power: $_pg_path did not return within 60 s - reset its USB port"
+				if _pg_wait 150; then
+					logger -t 5gmodem "power: $_pg_path came back after the USB port reset"
+					exit 0
+				fi
+			elif _pg_wait 120; then
+				exit 0
+			fi
+			logger -t 5gmodem "power: $_pg_path still missing - powering the slot off for 15 s"
+			echo "$_pg_off" > "$GP" 2>/dev/null
+			sleep 15
+			echo "$_pg_on" > "$GP" 2>/dev/null
+			sleep 20
+			_pg_kick
+			if _pg_wait 240; then
+				logger -t 5gmodem "power: $_pg_path came back after the long power-off"
+				exit 0
+			fi
+			logger -p daemon.err -t 5gmodem "power: $_pg_path did not come back after the power cycle, USB port resets and a long power-off - reboot the router"
+			exit 0
+		fi
+		_pg_n=0
+		while [ "$_pg_n" -lt 120 ] && [ ! -e "/sys/bus/usb/devices/$_pg_path" ]; do
+			sleep 1; _pg_n=$((_pg_n + 1))
+		done
+		[ -e "/sys/bus/usb/devices/$_pg_path" ] && exit 0
+		echo "$_pg_off" > "$GP" 2>/dev/null
+		_pg_n=0
+		while [ "$_pg_n" -lt 120 ] && [ ! -e "/sys/bus/usb/devices/$_pg_path" ]; do
+			sleep 1; _pg_n=$((_pg_n + 1))
+		done
+		if [ -e "/sys/bus/usb/devices/$_pg_path" ]; then
+			logger -t 5gmodem "power: $_pg_path came back with $G=$_pg_off - left it at $_pg_off"
+			exit 0
+		fi
+		echo "$_pg_on" > "$GP" 2>/dev/null
+		logger -t 5gmodem "power: $_pg_path did not come back with either value of $G - restored $_pg_on"
+	) >/dev/null 2>&1 </dev/null &
+	echo "{\"success\":true,\"mode\":\"power\",\"gpio\":\"$G\"}"
+	sleep 1
+	exit 0
+fi
+
+# --- МОДЕМ БЕЗ AT-ПОРТОВ -----------------------------------------------------
+# У HiLink-модема перезагрузка делается его же API: AT-канала, куда послать
+# CFUN, попросту нет. Без этой ветки кнопка возвращала бы "AT port not found",
+# хотя перезагрузить модем вполне возможно.
+_rb_act=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+_rb_am=""
+if [ -n "$PORT" ]; then
+	_rb_tp=$(readlink -f "/sys/class/tty/${PORT##*/}/device" 2>/dev/null)
+	_rb_tp=${_rb_tp%/*}; _rb_tp=${_rb_tp##*/}
+	_rb_am=${_rb_tp%%:*}
+	case "$_rb_am" in [0-9]*-[0-9]*) ;; *) _rb_am="" ;; esac
+fi
+[ -n "$_rb_am" ] || _rb_am="$_rb_act"
+_rb_if=""
+if [ -n "$_rb_am" ]; then
+	_rb_if=$(uci -q get "5gmodem.m_$(echo "$_rb_am" | sed 's/[^A-Za-z0-9]/_/g').network")
+fi
+if [ -z "$_rb_if" ] && [ "$_rb_am" = "$_rb_act" ]; then
+	_rb_if=$(uci -q get 5gmodem.@5gmodem[0].network)
+fi
+if [ -n "$_rb_am" ]; then
+	_rb_sec="m_$(echo "$_rb_am" | sed 's/[^A-Za-z0-9]/_/g')"
+	if [ "$(uci -q get "5gmodem.$_rb_sec.kind")" = "hilink" ]; then
+		# В фоне с отвязкой дескрипторов: модем уходит с шины, и синхронный
+		# вызов досидел бы до таймаута rpcd (та же грабля, что и в ветке power).
+		( /usr/share/5gmodem/hilink.sh reboot "$_rb_am" ) >/dev/null 2>&1 </dev/null &
+		echo '{"success":true,"mode":"hilink-api"}'
+		sleep 1
+		exit 0
+	fi
+fi
+
+[ -n "$PORT" ] || PORT=$(/usr/share/5gmodem/detect.sh 2>/dev/null)
+[ -n "$PORT" ] || { echo '{"success":false,"error":"AT port not found"}'; exit 0; }
+
+# Перезагрузка модема должна попасть в порт ЦЕЛИКОМ: команда, перехваченная
+# посреди чужого обмена, молча не сработает, а пользователь увидит "перезагружаю"
+# и ничего больше.
+. /usr/share/5gmodem/atlock.sh
+. /usr/share/5gmodem/lib.sh 2>/dev/null
+# ...а значит очередь надо ДОЖДАТЬСЯ, а не просто попросить: at_lock возвращает
+# 1, если за отведённые секунды порт не освободился, и CFUN, посланный поверх
+# чужого обмена, ровно тем же способом «молча не срабатывает» (тот же отказ, что
+# соблюдает at_query). Лучше честно ответить «порт занят» (аудит 12.09.2026).
+at_lock "$PORT" 15 || { echo '{"success":false,"error":"AT port busy"}'; exit 0; }
+
+if [ "$MODE" = "hard" ]; then
+	# Full reset (AT+CFUN=1,1): the modem reboots and RE-ENUMERATES on USB, so
+	# the AT port vanishes mid-command - a synchronous sms_tool would block ~35s
+	# and the UI XHR would time out even though the reset succeeded. Fire it in
+	# the background and return at once; the resolve hotplug re-pins ports and
+	# brings the interface back after re-enumeration (no ifup here - the port is
+	# gone).
+	# Редирект нужен НА подоболочке (см. ветку power выше): иначе она наследует
+	# пайпы rpcd и держит их, пока sms_tool ждёт ответа от исчезнувшего порта, -
+	# rpcd досиживает до таймаута, и «фон» не спасает от «ошибки XHR».
+	IF="$_rb_if"
+	_AMP="$_rb_am"
+	( sms_tool -d "$PORT" at "AT+CFUN=1,1" ) >/dev/null 2>&1 </dev/null &
+	# ФАНТОМНАЯ СЕССИЯ ПОСЛЕ РЕБУТА. После CFUN=1,1 модем переэнумерируется на USB,
+	# НО у fibocom/xmm/ecm сетевое устройство (RNDIS/CDC) не отваливается -> netifd
+	# считает интерфейс всё ещё поднятым и после возврата модема НЕ передозванивается.
+	# Интерфейс висит со старым IP и мёртвой сессией (проверено вживую: uptime
+	# интерфейса не сбрасывался, IP прежний, CGACT/пинг — Network unreachable), из-за
+	# чего казалось, что модем вовсе не перезагрузился. Сторож ждёт, пока модем реально
+	# исчезнет и вернётся по USB-пути, и форсит down+up: down рвёт прото (teardown),
+	# up запускает НОВЫЙ дозвон. ifup здесь мало — на «поднятом» интерфейсе это no-op.
+	if [ -n "$IF" ] && [ -n "$_AMP" ]; then
+	( eval "exec $AT_LOCK_FD>&-"    # не держим AT-замок весь долгий ожидания
+	  _n=0
+	  while [ "$_n" -lt 40 ] && [ -e "/sys/bus/usb/devices/$_AMP" ]; do sleep 1; _n=$((_n+1)); done
+	  _n=0
+	  while [ "$_n" -lt 100 ] && [ ! -e "/sys/bus/usb/devices/$_AMP" ]; do sleep 1; _n=$((_n+1)); done
+	  [ -e "/sys/bus/usb/devices/$_AMP" ] || exit 0   # модем не вернулся - нечего дозванивать
+	  sleep 8                        # дать resolve-hotplug перепривязать порты после переэнумерации
+	  ubus call "network.interface.$IF" down >/dev/null 2>&1
+	  sleep 3
+	  # КАРТА ПОСЛЕ CFUN=1,1 ИНИЦИАЛИЗИРУЕТСЯ ДОЛГО - ДОЗВАНИВАЕМСЯ В ГОТОВУЮ.
+	  #
+	  # У QMI-модема (Telit LM960) карта после сброса поднимается до ~100 c. Если
+	  # дозвониться сразу после переэнумерации, дозвон бьёт в ещё illegal-карту, и
+	  # qmi.sh уходит в свой power-cycle-цикл SIM - а он же режет ей питание каждые
+	  # 8 c и не даёт подняться НИКОГДА (петля кормит себя, живой случай 12.08.2026:
+	  # лестница ребутила модем, а редозвон тут же ронял его обратно в illegal).
+	  # Прото уже опущено (down выше), никто не дёргает канал - ждём готовности
+	  # карты в этом тихом окне и только потом поднимаем, один раз, в живую карту
+	  # (ровно так вручную поднимался IP: CFUN=1,1 -> пауза -> up). Потолок 120 c;
+	  # чтение карты не удаётся (нет прокси) - молча досиживаем потолок, этого
+	  # хватает на инициализацию. Не-QMI (device не cdc-wdm) окно пропускает.
+	  _rbd=$(uci -q get "network.$IF.device")
+	  proto_in uqmi "$(uci -q get "network.$IF.proto")" || _rbd=""
+	  case "$_rbd" in
+		/dev/cdc-wdm*)
+			_n=0
+			while [ "$_n" -lt 24 ]; do
+				case "$(uqmi -s -d "$_rbd" -t 3000 --uim-get-sim-state 2>/dev/null)" in
+					*'"card_application_state":"ready"'*) break ;;
+				esac
+				sleep 5; _n=$((_n + 1))
+			done ;;
+	  esac
+	  ubus call "network.interface.$IF" up >/dev/null 2>&1 || ifup "$IF" >/dev/null 2>&1
+	) >/dev/null 2>&1 </dev/null &
+	fi
+else
+	# Soft radio restart (CFUN=4 -> CFUN=1): no USB re-enumeration, the port
+	# stays. This drops the data bearer, so nudge the app's interface back up
+	# (kernel qmi/mbim/atc/fibocom need it; MM-managed modems reconnect on their
+	# own). Backgrounded so the script returns promptly to the UI.
+	IF="$_rb_if"
+	# Намеренный soft-reconnect (кнопка «переподключить», применение бендов и т.п.),
+	# не холодный boot-attach: гасим восстановление диапазонов на порождённый нами
+	# ifup, иначе 31-5gmodem-bands сделал бы лишний CFUN поверх (двойной CFUN подряд
+	# вешает PDP-контекст FM350).
+	[ -n "$IF" ] && : > "/tmp/5gmodem/bandrestore_$IF" 2>/dev/null
+	# ВЕСЬ ЦИКЛ - В ФОНЕ, ОДНОЙ ПОДОБОЛОЧКОЙ (аудит 12.09.2026).
+	# 1) Синхронным он не мог быть по той же причине, что и ветки power/hard:
+	#    у sms_tool нет своего таймаута, и на занятом или подвисающем порту
+	#    ожидание очереди плюс CFUN легко перекрывали 30-секундный потолок rpcd -
+	#    UI показывал «ошибку XHR» при уже перезапущенном радио.
+	# 2) Дескриптор AT-замка (fd 8) подоболочка НАСЛЕДУЕТ намеренно: замок
+	#    должен жить ровно пока идёт CFUN-обмен. Отпускаем его сами (at_unlock)
+	#    сразу после обмена - раньше он не снимался вовсе и висел на порту всё
+	#    время фоновых пауз, а следующий опрос метрик упирался в «порт занят».
+	# 3) Порядок и паузы сохранены один в один: down/up идут ПОСЛЕ CFUN=1, иначе
+	#    передозвон пришёлся бы на ещё не поднятое радио.
+	# Прицельно через ubus DOWN+UP, а не `ifup`: на части прошивок ifup вызывает
+	# полную перезагрузку конфигурации ("hostapd: Reload all interfaces") и роняет
+	# ЧУЖИЕ интерфейсы - на двухмодемном роутере от этого падал соседний модем.
+	# Но ОДНОГО `ubus ... up` мало: после CFUN-цикла netifd считает интерфейс всё
+	# ещё поднятым (у fibocom/xmm RNDIS-устройство не отваливается), и `up` на
+	# up-интерфейсе - no-op, дозвон НЕ повторяется -> IP есть, инета нет
+	# (регресс 1.7.1 на FM350, воспроизведён: ubus up -> 0 пакетов, down+up -> ок).
+	# down форсирует teardown прото, up - заново дозвон; и то и другое прицельно,
+	# глобального reload нет. ifup - фолбэк, если ubus-пути нет.
+	( sms_tool -d "$PORT" at "AT+CFUN=4" >/dev/null 2>&1
+		sleep 3
+		_cf_n=0
+		while [ "$_cf_n" -lt 3 ]; do
+			_cf_n=$((_cf_n + 1))
+			sms_tool -d "$PORT" at "AT+CFUN=1" >/dev/null 2>&1
+			sleep 2
+			case "$(sms_tool -d "$PORT" at "AT+CFUN?" 2>/dev/null)" in *"+CFUN: 1"*) break ;; esac
+		done
+		at_unlock
+		[ -n "$IF" ] || exit 0
+		sleep 6
+		ubus call "network.interface.$IF" down >/dev/null 2>&1
+		sleep 3
+		ubus call "network.interface.$IF" up >/dev/null 2>&1 \
+			|| ifup "$IF" >/dev/null 2>&1
+	) >/dev/null 2>&1 </dev/null &
+fi
+
+echo "{\"success\":true,\"mode\":\"$MODE\"}"
+sleep 1
+exit 0

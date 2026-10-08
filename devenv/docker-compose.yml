@@ -1,4 +1,12 @@
 services:
+  chown-fix:
+    image: alpine:latest
+    user: "0"
+    volumes:
+      - dl:/dl
+      - openwrt_tmp:/openwrt_tmp
+    command: sh -c "chown -R 1000:1000 /dl /openwrt_tmp && chmod -R 777 /dl /openwrt_tmp"
+
   builder:
     build:
       context: ..
@@ -7,6 +15,8 @@ services:
         OPENWRT_VERSION: ${OPENWRT_VERSION:-v25.12.5}
     container_name: msm8916-openwrt-build
     working_dir: /home/builder/openwrt
+    entrypoint: ["/repo/devenv/entrypoint.sh"]
+    command: ["/bin/bash"]
     stdin_open: true
     tty: true
     volumes:
@@ -17,12 +27,14 @@ services:
       - dl:/home/builder/openwrt/dl
       - build_dir:/home/builder/openwrt/build_dir
       - staging_dir:/home/builder/openwrt/staging_dir
-      - ../firmware/output:/home/builder/openwrt/bin/targets/msm89xx/msm8916
-      - config:/home/builder/openwrt/build_config
+      - ../firmware/output:/repo_output
+      - bin_dir:/home/builder/openwrt/bin
+      - openwrt_tmp:/home/builder/openwrt/tmp
 volumes:
   dl:
   build_dir:
   staging_dir:
-  config:
+  bin_dir:
+  openwrt_tmp:
 
 

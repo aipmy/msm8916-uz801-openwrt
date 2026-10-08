@@ -19,4 +19,7 @@ sed -i 's/"device": "eth0"/"device": "br-lan"/g' /etc/board.json
 # Remove target-specific APK feed (msm89xx is not on downloads.openwrt.org)
 sed -i '\|/targets/msm89xx/msm8916/packages|d' /etc/apk/repositories.d/distfeeds.list 2>/dev/null || true
 
+# Set Proton2025 as default LuCI theme
+uci -q set luci.main.mediaurlbase='/luci-static/proton2025' 2>/dev/null || true
+
 uci commit

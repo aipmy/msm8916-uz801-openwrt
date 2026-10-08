@@ -1,3 +1,4 @@
+CONFIG_DEVEL=y
 # Target Board Architecture
 CONFIG_TARGET_msm89xx=y
 CONFIG_TARGET_msm89xx_msm8916=y
@@ -21,9 +22,15 @@ CONFIG_PACKAGE_modemmanager=y
 CONFIG_PACKAGE_qmi-utils=y
 CONFIG_PACKAGE_libqmi=y
 CONFIG_PACKAGE_libmbim=y
+CONFIG_PACKAGE_mbim-utils=y
+CONFIG_PACKAGE_sms-tool=y
+CONFIG_PACKAGE_comgt=y
+CONFIG_PACKAGE_coreutils-stty=y
+CONFIG_PACKAGE_luci-app-5gmodem=y
 CONFIG_PACKAGE_libqrtr-glib=y
 CONFIG_PACKAGE_luci-proto-modemmanager=y
 CONFIG_PACKAGE_luci-proto-qmi=y
+CONFIG_PACKAGE_luci-proto-mbim=y
 CONFIG_PACKAGE_luci-proto-ppp=y
 
 # 2. Kernel LED Trigger Modules
@@ -51,6 +58,7 @@ CONFIG_PACKAGE_iwinfo=y
 CONFIG_PACKAGE_luci=y
 CONFIG_PACKAGE_luci-ssl=y
 CONFIG_PACKAGE_luci-theme-bootstrap=y
+CONFIG_PACKAGE_luci-theme-proton2025=y
 CONFIG_PACKAGE_luci-app-firewall=y
 CONFIG_PACKAGE_luci-app-package-manager=y
 

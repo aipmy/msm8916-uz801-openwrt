@@ -37,8 +37,10 @@ RUN cd openwrt && \
 RUN cd openwrt && \
     ./scripts/feeds update -a && \
     ./scripts/feeds install -a && \
+    sed -i 's/default TARGET_mediatek/default TARGET_msm89xx/' scripts/target-metadata.pl && \
     rm -rf tmp
 
 WORKDIR /home/builder/openwrt
 
+ENTRYPOINT ["/bin/bash", "-c", "sed -i 's/default TARGET_mediatek/default TARGET_msm89xx/' scripts/target-metadata.pl 2>/dev/null || true; exec \"$@\"", "--"]
 CMD ["/bin/bash"]

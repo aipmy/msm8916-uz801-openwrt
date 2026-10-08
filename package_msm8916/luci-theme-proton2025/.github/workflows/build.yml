@@ -1,0 +1,162 @@
+name: Build IPK & APK Packages
+
+on:
+  push:
+    branches: [main, master]
+    tags:
+      - "v*"
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.package_format }} package
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package_format: ipk
+            artifact_name: luci-theme-proton2025-ipk
+            sdk_url: https://downloads.openwrt.org/releases/23.05.5/targets/x86/64/openwrt-sdk-23.05.5-x86-64_gcc-12.3.0_musl.Linux-x86_64.tar.xz
+          - package_format: apk
+            artifact_name: luci-theme-proton2025-apk
+            sdk_url: https://downloads.openwrt.org/snapshots/targets/x86/64/openwrt-sdk-x86-64_gcc-14.4.0_musl.Linux-x86_64.tar.zst
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Resolve package version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            PACKAGE_VERSION="${GITHUB_REF#refs/tags/v}"
+          else
+            PACKAGE_VERSION="0.$(date +%y%m%d).${GITHUB_RUN_NUMBER}"
+          fi
+
+          echo "PACKAGE_VERSION=$PACKAGE_VERSION" >> "$GITHUB_ENV"
+          echo "PACKAGE_RELEASE=1" >> "$GITHUB_ENV"
+
+      - name: Install host tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zstd
+
+      - name: Download OpenWrt SDK
+        env:
+          SDK_URL: ${{ matrix.sdk_url }}
+        run: |
+          cd "$RUNNER_TEMP"
+          SDK_ARCHIVE="$RUNNER_TEMP/$(basename "$SDK_URL")"
+          curl -fL "$SDK_URL" -o "$SDK_ARCHIVE"
+          tar -xf "$SDK_ARCHIVE"
+          SDK_DIR="$(find "$RUNNER_TEMP" -maxdepth 1 -type d -name 'openwrt-sdk*' | head -n 1)"
+          if [ -z "$SDK_DIR" ]; then
+            echo "OpenWrt SDK directory not found" >&2
+            exit 1
+          fi
+          echo "SDK_DIR=$SDK_DIR" >> "$GITHUB_ENV"
+
+      - name: Build package with OpenWrt SDK
+        working-directory: ${{ env.SDK_DIR }}
+        env:
+          PACKAGE_FORMAT: ${{ matrix.package_format }}
+        run: |
+          mkdir -p package/luci-theme-proton2025
+          rsync -a --delete \
+            --exclude '.git' \
+            --exclude 'bin' \
+            --exclude 'build_dir' \
+            --exclude 'staging_dir' \
+            "$GITHUB_WORKSPACE/" package/luci-theme-proton2025/
+
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+          cat >> .config << 'CONFIG_END'
+          CONFIG_PACKAGE_luci-theme-proton2025=m
+          CONFIG_END
+
+          if [ "$PACKAGE_FORMAT" = "apk" ]; then
+            echo "CONFIG_USE_APK=y" >> .config
+          fi
+
+          make defconfig
+          make package/luci-theme-proton2025/compile V=s \
+            PROTON_VERSION="$PACKAGE_VERSION" \
+            PROTON_RELEASE="$PACKAGE_RELEASE"
+
+          mkdir -p "$GITHUB_WORKSPACE/dist/$PACKAGE_FORMAT"
+          if [ "$PACKAGE_FORMAT" = "apk" ]; then
+            find bin/packages -type f -name "luci-theme-proton2025-*.apk" -print > "$RUNNER_TEMP/package-files.txt"
+          else
+            find bin/packages -type f -name "luci-theme-proton2025_*.ipk" -print > "$RUNNER_TEMP/package-files.txt"
+          fi
+
+          if [ ! -s "$RUNNER_TEMP/package-files.txt" ]; then
+            echo "No .${PACKAGE_FORMAT} package was produced" >&2
+            exit 1
+          fi
+
+          while IFS= read -r package_file; do
+            cp "$package_file" "$GITHUB_WORKSPACE/dist/$PACKAGE_FORMAT/"
+          done < "$RUNNER_TEMP/package-files.txt"
+
+          echo "Built package version: ${PACKAGE_VERSION}-r${PACKAGE_RELEASE}"
+          ls -lah "$GITHUB_WORKSPACE/dist/$PACKAGE_FORMAT"
+
+      - name: Upload ${{ matrix.package_format }} artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: dist/${{ matrix.package_format }}/*
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: luci-theme-proton2025-*
+          path: dist
+          merge-multiple: true
+
+      - name: Show release files
+        run: ls -lah dist
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: dist/*
+          body: |
+            ## Proton2025 Theme ${{ github.ref_name }}
+
+            ### Installation
+
+            One command over root SSH. The script detects the package manager
+            (`apk` or `opkg`), picks the matching asset from this release,
+            installs it and switches LuCI over to the theme.
+
+            ```bash
+            wget -qO- https://raw.githubusercontent.com/ChesterGoodiny/luci-theme-proton2025/main/install.sh | sh
+            ```
+
+            ### Removal
+
+            ```bash
+            wget -qO- https://raw.githubusercontent.com/ChesterGoodiny/luci-theme-proton2025/main/uninstall.sh | sh
+            ```
+
+            To install by hand, take the exact file name from the assets below:
+            `.apk` if `command -v apk` prints a path, `.ipk` otherwise.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

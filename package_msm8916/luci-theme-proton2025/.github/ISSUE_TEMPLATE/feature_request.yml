@@ -1,0 +1,28 @@
+name: "✨ Feature Request / Предложение"
+description: "Suggest a new design, widget or feature / Предложить новый дизайн, виджет или функцию"
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: "💡 Your Idea / Ваша идея"
+      description: "What would you like to add or change? / Что вы хотите добавить или изменить в теме?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: "🎯 Why is this needed? / Почему это нужно?"
+      description: "How will this improve the user experience? / Как это улучшит использование темы?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: references
+    attributes:
+      label: "🎨 Examples & Mockups / Примеры и референсы"
+      description: "Links, screenshots, or CSS examples / Ссылки, скриншоты, макеты или примеры CSS"
+    validations:
+      required: false

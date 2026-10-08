@@ -27,7 +27,9 @@
 
 | Target Profile | Board Code / Hardware Variants | Form Factor | Verified Features |
 | :--- | :--- | :--- | :--- |
-| **`jz01-45-v33`** | Handsome JZ01-45-V33 (2026 Rev), Zhihe JZ01 | USB Dongle | Native LEDs (R25, G6, B7), Reset Button (37), SIM Mux (22/23/1/52), BAM-DMUX Traffic Stats |
+| **`jz01-45-v33`** | Handsome JZ01-45-V33 (2026 Rev), Zhihe JZ01 | USB Dongle | Native LEDs (R25, G6, B7), Reset Button (37), SIM Mux (22/23/1/52), BAM-DMUX Traffic Stats, Proton2025, 5G/4G App |
+| **`generic-uf02`** | Generic 250605 V0S / UF02 Dongle | USB Dongle | 4G LTE Modem, WiFi (wcn36xx), USB Gadget, Proton2025, 5G/4G App |
+| **`yiming-uz801v3`** | YiMing UZ801 v3.0 | USB Dongle | 4G LTE Modem, WiFi (wcn36xx), USB Gadget, Proton2025, 5G/4G App |
 | **`uf896` / `ufi001c`** | THWC-UF896, THWC-UFI001C, UFI001B | USB Dongle / MiFi | 4G LTE Modem, WiFi (wcn36xx), USB Gadget (RNDIS/NCM) |
 | **`fy-mf800`** | FY-MF800, MF800B, M9S | Portable 4G WiFi | LCD / Status LEDs, ModemManager, SIM Switch |
 | **`yiming-uz801v3`**| UZ801 v3.0, UZ801 classic | USB Dongle | Base reference support |
@@ -114,6 +116,8 @@ pip install -r edl/requirements.txt
 ```bash
 python3 flasher.py
 ```
+
+> For step-by-step flashing options (Interactive CLI, Fastboot manual commands, and EDL 9008 emergency unbrick), consult the [Flashing & Firmware Guide](Docs/FLASHING_GUIDE.md).
 
 ---
 
