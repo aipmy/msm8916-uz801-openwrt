@@ -1,0 +1,4 @@
+Using loader MSM8916_UZ801.bin ...
+Waiting for the device
+Device detected :)
+Mode detected: sahara
