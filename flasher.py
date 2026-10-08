@@ -362,7 +362,13 @@ def do_restore_full(in_file: str, loader: str) -> bool:
 def do_flash_openwrt(loader: str, board_info: Optional[Dict[str, str]] = None, skip_backup: bool = False) -> bool:
     if not board_info:
         board_info = select_board("1")
+    
+    # Deteksi lokasi firmware (output build atau subfolder board)
     openwrt_dir = os.path.join(PROJECT_DIR, board_info["fw_dir"])
+    output_dir = os.path.join(PROJECT_DIR, "firmware", "output")
+    if not os.path.exists(openwrt_dir) and os.path.exists(output_dir):
+        openwrt_dir = output_dir
+
     target_backup_dir = os.path.join(PROJECT_DIR, board_info["backup_dir"])
     
     log(f"{SYM_INFO} Target Board Flashing: {C_WHITE}{board_info['name']}{C_RESET}")
