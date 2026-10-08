@@ -1,8 +1,25 @@
-# Qualcomm MSM8916 4G LTE USB Dongles / Sticks - OpenWrt R&D Suite
+# msm8916-uz801-openwrt
 
-A clean, modular, and reproducible OpenWrt development ecosystem, kernel patchset, and flashing toolkit for **Qualcomm Snapdragon 410 (MSM8916)** USB 4G LTE modems and dongles.
+> **All-in-One Flasher, EDL 9008 Recovery, Multi-Board DTB Patching, and OpenWrt R&D Suite for Qualcomm Snapdragon 410 (MSM8916) 4G LTE USB Modems & Dongles.**
 
-Built on upstream **OpenWrt v25.12.x (Linux Kernel 6.12)**. Cross-platform compatible with **macOS (Apple Silicon & Intel)**, **Linux**, and **Windows (WSL2 / PowerShell)**.
+[![GitHub Stars](https://img.shields.io/github/stars/aipmy/msm8916-uz801-openwrt?style=flat-square)](https://github.com/aipmy/msm8916-uz801-openwrt/stargazers)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Qualcomm%20MSM8916%20%28Snapdragon%20410%29-orange.svg?style=flat-square)]()
+[![OpenWrt](https://img.shields.io/badge/OpenWrt-v25.12.5-green.svg?style=flat-square)](https://openwrt.org)
+[![Kernel](https://img.shields.io/badge/Linux%20Kernel-6.12.94-brightgreen.svg?style=flat-square)](https://kernel.org)
+
+---
+
+## 📑 Quick Links & Documentation
+
+- [Introduction & Board Architecture](docs/Introduction.md)
+- [Hardware Pinout & Flashing Guide](Docs/HARDWARE_AND_FLASHING.md)
+- [Firmware Dump and EFS/NVRAM Restore](docs/Firmware-Dump-and-Restore.md)
+- [Customizing & Docker Build Pipeline](docs/Build-Guide.md)
+- [Hardware Modifications & SIM Pinouts](docs/Modifications.md)
+- [OpenWrt Configuration & Modem Setup](docs/OpenWRT.md)
+- [EDL 9008 Recovery & Unbricking](docs/Recovery.md)
+- [Troubleshooting Common Issues](docs/Troubleshooting.md)
 
 ---
 
@@ -10,16 +27,16 @@ Built on upstream **OpenWrt v25.12.x (Linux Kernel 6.12)**. Cross-platform compa
 
 | Target Profile | Board Code / Hardware Variants | Form Factor | Verified Features |
 | :--- | :--- | :--- | :--- |
-| **`jz01-45-v33`** | Handsome JZ01-45-V33 (2026 Rev), Zhihe JZ01 | USB Dongle | Native LEDs, Reset Button, SIM Mux, Modem Traffic Stats |
-| **`uf896` / `ufi001c`** | THWC-UF896, THWC-UFI001C, UFI001B | USB Dongle / MiFi | 4G LTE Modem, WiFi (wcn36xx), USB Gadget |
-| **`fy-mf800`** | FY-MF800, MF800B, M9S | Portable 4G WiFi | LCD / Status LEDs, ModemManager |
+| **`jz01-45-v33`** | Handsome JZ01-45-V33 (2026 Rev), Zhihe JZ01 | USB Dongle | Native LEDs (R25, G6, B7), Reset Button (37), SIM Mux (22/23/1/52), BAM-DMUX Traffic Stats |
+| **`uf896` / `ufi001c`** | THWC-UF896, THWC-UFI001C, UFI001B | USB Dongle / MiFi | 4G LTE Modem, WiFi (wcn36xx), USB Gadget (RNDIS/NCM) |
+| **`fy-mf800`** | FY-MF800, MF800B, M9S | Portable 4G WiFi | LCD / Status LEDs, ModemManager, SIM Switch |
 | **`yiming-uz801v3`**| UZ801 v3.0, UZ801 classic | USB Dongle | Base reference support |
 
 ---
 
 ## 🚀 Key Improvements & Bug Fixes over Upstream
 
-1. **Fixed BAM-DMUX Traffic Stats (0 Bytes Bug)**:
+1. **Fixed BAM-DMUX Traffic Accounting (0 Bytes Bug)**:
    - Upstream Linux kernel does not update netdev packet counters for Qualcomm BAM-DMUX.
    - Integrated kernel patch using `DEV_STATS_INC` and `DEV_STATS_ADD` ensures accurate real-time RX/TX throughput monitoring in LuCI Web UI and `/proc/net/dev`.
 2. **Accurate Hardware Device Tree for JZ01-45-V33**:
@@ -35,106 +52,6 @@ Built on upstream **OpenWrt v25.12.x (Linux Kernel 6.12)**. Cross-platform compa
 4. **All-in-One Flasher & EFS Backup Toolkit (`flasher.py`)**:
    - Standalone, interactive CLI with built-in EDL 9008 protocol and Qualcomm Firehose loader.
    - Automatically safeguards critical NVRAM/EFS radio partitions (`modemst1`, `modemst2`, `fsg`, `fsc`, `persist`).
-
----
-
-## 📂 Repository Structure
-
-```text
-├── configs/                   # Target diffconfigs (jz0145, mf800b, uf02, ufi001b, etc.)
-│   ├── diffconfig_jz0145_complete
-│   ├── diffconfig_mf800b
-│   ├── diffconfig_uf02
-│   └── diffconfig_ufi001b
-├── patches/                   # Clean in-tree kernel & DTS patches
-│   ├── dts/                   # Native board device tree files (.dts)
-│   ├── kernel/                # Custom kernel modules (ledtrig-sim.c)
-│   ├── 890-wwan-qcom-bam-dmux-fix-rx-tx-stats.patch
-│   ├── 891-drivers-leds-add-simcard-trigger.patch
-│   └── 910-arm64-dts-fix-jz0145-leds.patch
-├── scripts/                   # Automated build & utility scripts
-│   ├── build_in_docker.sh     # Reproducible Docker build pipeline
-│   └── edl_backup.py          # Standalone partition backup utility
-├── firmware/                  # Firmware storage and release binaries
-│   ├── output/                # Final build artifacts (boot.img, system.img, etc.)
-│   └── README.md
-├── backups/                   # Storage directory for saved EFS / NVRAM dumps
-├── edl/                       # Bundled EDL client & Qualcomm Firehose loader
-├── flasher.py                 # Interactive cross-platform flashing utility
-├── Dockerfile                 # Containerized build environment (Ubuntu 22.04)
-├── docker-compose.yml         # Docker volume mount definitions
-└── README.md
-```
-
----
-
-## 🛠️ Building Firmware via Docker
-
-### Prerequisites
-- Docker & Docker Compose installed on your host OS.
-- At least 25 GB free disk space.
-
-### Build Steps
-
-1. **Clone this repository**:
-   ```bash
-   git clone https://github.com/aipmy/msm8916-uz801-openwrt.git
-   cd msm8916-uz801-openwrt
-   ```
-
-2. **Run the Automated Build Pipeline**:
-   ```bash
-   docker compose run --rm openwrt-builder /home/builder/project/scripts/build_in_docker.sh
-   ```
-
-3. **Monitor Live Build Progress**:
-   ```bash
-   docker logs -f $(docker ps -q --filter ancestor=msm8916-uz801-openwrt-openwrt-builder | head -n 1)
-   ```
-
-4. **Output Binaries**:
-   Artifacts will be packaged automatically into `firmware/output/`:
-   - `openwrt-msm89xx-msm8916-jz01-45-v33-squashfs-boot.img` (Kernel, DTB & lk2nd)
-   - `openwrt-msm89xx-msm8916-jz01-45-v33-squashfs-system.img` (Root Filesystem)
-   - `openwrt-msm89xx-msm8916-jz01-45-v33-squashfs-gpt_both0.bin` (Partition Table)
-   - `openwrt-msm89xx-msm8916-jz01-45-v33-firmware.zip` (Signed Modem DSP Firmware)
-
----
-
-## ⚡ Flashing & Unbricking Guide (macOS, Linux & Windows)
-
-### 1. Putting the Dongle into EDL 9008 Mode
-- **From ADB (OEM / Android Firmware)**:
-  ```bash
-  adb reboot edl
-  ```
-- **From Fastboot**:
-  ```bash
-  fastboot oem reboot-edl
-  ```
-- **Hardware Testpoint (Unbricking)**:
-  Short the physical EDL test points on the PCB to ground while plugging the USB dongle into your computer.
-
-### 2. Launch the Interactive Flasher
-```bash
-python3 flasher.py
-```
-
-The menu provides:
-- **Option 1**: Partition Table Diagnosis (`printgpt`)
-- **Option 4**: Backup Critical Radio & IMEI Partitions (`modemst1`, `modemst2`, `fsg`, `fsc`)
-- **Option 5 / 6**: Full eMMC Dump (4GB Raw / Partition by Partition)
-- **Option 7**: Flash OpenWrt Firmware (Safe auto-backup + GPT + Kernel + RootFS)
-- **Option 8**: Restore Radio Partitions
-
----
-
-## 🌐 Default Credentials & Network Configuration
-
-- **LuCI Web UI**: `http://192.168.1.1`
-- **SSH Access**: `ssh root@192.168.1.1` (No password by default)
-- **Modem Interface**: Protocol `ModemManager`, Device `qcom-soc`
-- **Default Wi-Fi**: OpenWrt (Disabled by default, configure in **Network -> Wireless**)
 
 ---
 
@@ -158,8 +75,77 @@ Our standard firmware image is pre-loaded with essential networking, monitoring,
 
 ---
 
-## 📜 License & Credits
+## 🛠️ Prerequisites & Setup
 
-- Upstream OpenWrt: GPL-2.0
-- Qualcomm MSM8916 Mainline Linux Kernel: GPL-2.0
-- Thanks to the open-source community contributors: `hkfuertes`, `ImMALWARE`, `akbar-npj`, and `bkerler` (edl).
+Ensure your host OS has Python 3 and USB drivers installed:
+
+- **Windows**:
+  1. Install [Python 3](https://www.python.org/downloads/) (Check *"Add Python to PATH"* during installation).
+  2. Install [Qualcomm HS-USB QDLoader 9008 Driver](https://gsmusbdriver.com/qualcomm-hs-usb-qdloader-9008) or use **Zadig** to install `WinUSB` or `libusb-win32` driver for VID `05C6` PID `9008`.
+- **macOS (Apple Silicon & Intel)**:
+  ```bash
+  brew install libusb python3
+  ```
+- **Linux (Ubuntu / Debian / Arch / Fedora)**:
+  ```bash
+  sudo apt update && sudo apt install -y python3 python3-venv python3-pip libusb-1.0-0-dev
+  ```
+
+---
+
+## ⚡ Quick Start & Flashing
+
+### 1. Clone Repository & Setup Environment
+```bash
+git clone https://github.com/aipmy/msm8916-uz801-openwrt.git
+cd msm8916-uz801-openwrt
+
+python3 -m venv venv
+source venv/bin/activate  # On Windows: .\venv\Scripts\activate
+pip install -r edl/requirements.txt
+```
+
+### 2. Put Dongle into EDL 9008 Mode
+- **From ADB**: `adb reboot edl`
+- **From Fastboot**: `fastboot oem reboot-edl`
+- **Hardware Testpoint**: Hold the physical reset button or short test points to GND while connecting to USB.
+
+### 3. Run Interactive Flasher
+```bash
+python3 flasher.py
+```
+
+---
+
+## 🏗️ Docker Build Pipeline (Reproducible Build)
+
+To compile the entire OpenWrt firmware from scratch:
+
+```bash
+docker compose run -d --name openwrt-msm8916-build openwrt-builder bash -c "
+sudo apt-get update && sudo apt-get install -y bc && \
+/home/builder/project/scripts/build_in_docker.sh
+"
+```
+
+Monitor live build progress anytime:
+```bash
+docker logs -f openwrt-msm8916-build
+```
+
+---
+
+## 📜 Credits & Acknowledgements
+
+Special thanks to the researchers and open-source pioneers:
+- **[B. Kerler (@bkerler)](https://github.com/bkerler/edl)** - For the `edl` client toolset.
+- **[AlienWolfX (@AlienWolfX)](https://github.com/AlienWolfX/UZ801-USB-MODEM)** - For hardware schematics and reverse engineering.
+- **[hkfuertes (@hkfuertes)](https://github.com/hkfuertes/msm8916-openwrt)** - For modern OpenWrt target definitions.
+- **[ImMALWARE (@ImMALWARE)](https://github.com/ImMALWARE/uz801-openwrt)** - For the BAM-DMUX stats kernel counter logic.
+- **[akbar-npj (@akbar-npj)](https://github.com/akbar-npj/msm8916-openwrt)** - For multi-board diffconfigs and documentation.
+
+## License
+
+This repository is open-source software licensed under the [MIT License](LICENSE).
+
+<p align="center">Maintained with ❤️ by <b><a href="https://github.com/aipmy">@aipmy</a></b></p>
