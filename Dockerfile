@@ -33,6 +33,7 @@ RUN apt-get update && apt-get install -y \
     locales \
     fdisk \
     gcc-arm-none-eabi \
+    python3-cryptography \
     python3-pycryptodome \
     python3-pyasn1-modules \
     && rm -rf /var/lib/apt/lists/*

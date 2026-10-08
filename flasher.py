@@ -111,13 +111,12 @@ def flash_openwrt(board_meta: dict) -> None:
 
 
 def backup_efs() -> None:
-    print("\n=== Backup EFS Partitions ===")
-    out_dir = BACKUP_DIR / "efs"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    partitions = ["modemst1", "modemst2", "fsg", "fsc"]
-    print(f"Target folder: {out_dir}")
-    print(f"Partisi      : {', '.join(partitions)}")
-    print("[INFO] Backup via EDL/Fastboot command siap.")
+    print("\n=== Backup EFS Partitions via EDL ===")
+    edl_backup_script = BASE_DIR / "scripts" / "edl_backup.py"
+    if edl_backup_script.exists():
+        subprocess.run([sys.executable, str(edl_backup_script)])
+    else:
+        print("[ERROR] Script edl_backup.py tidak ditemukan.")
     input("\nTekan Enter untuk kembali ke menu...")
 
 
