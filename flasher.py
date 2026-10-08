@@ -59,10 +59,10 @@ KNOWN_COMPOSITES = {
 
 SUPPORTED_BOARDS = {
     "1": {
-        "id": "JZ0145_V40_20260509",
-        "name": "JZ0145_V40_20260509 (Board Baru / Rev 2026)",
-        "fw_dir": "firmware/JZ0145_V40_20260509",
-        "backup_dir": "backups/JZ0145_V40_20260509"
+        "id": "JZ01-45-V33",
+        "name": "JZ01-45-V33 (4G LTE USB Dongle)",
+        "fw_dir": "firmware/output",
+        "backup_dir": "backups/jz01-45-v33"
     },
     "2": {
         "id": "FY_UZ801_V3.31",

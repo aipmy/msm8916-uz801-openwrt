@@ -1,7 +1,7 @@
 # Target Board Architecture
 CONFIG_TARGET_msm89xx=y
 CONFIG_TARGET_msm89xx_msm8916=y
-CONFIG_TARGET_msm89xx_msm8916_DEVICE_jz01-45=y
+CONFIG_TARGET_msm89xx_msm8916_DEVICE_jz01-45-v33=y
 
 # 1. Modem & Cellular Protocol Stack
 CONFIG_PACKAGE_modemmanager=y

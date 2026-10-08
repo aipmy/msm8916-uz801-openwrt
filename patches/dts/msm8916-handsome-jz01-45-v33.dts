@@ -5,8 +5,8 @@
 #include <dt-bindings/leds/common.h>
 
 / {
-	model = "JZ01-45-V33 4G Modem Stick";
-	compatible = "handsome,jz01-45-v33", "thwc,ufi001c", "qcom,msm8916";
+	model = "JZ01-45-V33 4G LTE USB Dongle";
+	compatible = "generic,jz01-45-v33", "thwc,ufi001c", "qcom,msm8916";
 };
 
 &button_restart {

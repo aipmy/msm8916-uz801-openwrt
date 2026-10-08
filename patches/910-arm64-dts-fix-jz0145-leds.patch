@@ -1,0 +1,32 @@
+--- a/arch/arm64/boot/dts/qcom/msm8916-yiming-uz801v3.dts
++++ b/arch/arm64/boot/dts/qcom/msm8916-yiming-uz801v3.dts
+@@ -10,15 +10,15 @@
+ };
+ 
+ &button_restart {
+-	gpios = <&tlmm 23 GPIO_ACTIVE_LOW>;
++	gpios = <&tlmm 37 GPIO_ACTIVE_LOW>;
+ };
+ 
+ &led_b {
+ 	gpios = <&tlmm 7 GPIO_ACTIVE_HIGH>;
+ };
+
+ &led_g {
+ 	gpios = <&tlmm 6 GPIO_ACTIVE_HIGH>;
+ };
+
+ &led_r {
+ 	gpios = <&tlmm 25 GPIO_ACTIVE_HIGH>;
+ };
+ 
+ &button_default {
+-	pins = "gpio23";
++	pins = "gpio37";
+ 	bias-pull-up;
+ };
+ 
+ &gpio_leds_default {
+-	pins = "gpio6", "gpio7", "gpio8";
++	pins = "gpio25", "gpio6", "gpio7";
+ };

@@ -26,18 +26,24 @@ fi
 
 echo "[3/6] Injecting Custom Kernel Drivers & Patches..."
 # 1. Patch BAM-DMUX 0 Bytes RX/TX Fix
-cp "$PROJECT_DIR/patches/890-wwan-qcom-bam-dmux-fix-rx-tx-stats.patch" target/linux/msm89xx/patches-6.12/ || true
+cp "$PROJECT_DIR/patches/890-wwan-qcom-bam-dmux-fix-rx-tx-stats.patch" target/linux/msm89xx/patches/ || true
 
 # 2. Driver & Patch LED SIM Card Trigger (ledtrig-sim.c)
 mkdir -p target/linux/msm89xx/files/drivers/leds/trigger/
 cp "$PROJECT_DIR/patches/kernel/ledtrig-sim.c" target/linux/msm89xx/files/drivers/leds/trigger/
-cp "$PROJECT_DIR/patches/891-drivers-leds-add-simcard-trigger.patch" target/linux/msm89xx/patches-6.12/ || true
+cp "$PROJECT_DIR/patches/891-drivers-leds-add-simcard-trigger.patch" target/linux/msm89xx/patches/ || true
+
+# 3. Patch Fisik LED JZ01-45 (Merah=25, Hijau=6, Biru=7)
+cp "$PROJECT_DIR/patches/910-arm64-dts-fix-jz0145-leds.patch" target/linux/msm89xx/patches/ || true
 
 # 3. Clean Device Tree JZ01-45-V33
 mkdir -p target/linux/msm89xx/files/arch/arm64/boot/dts/qcom/
 cp "$PROJECT_DIR/patches/dts/msm8916-handsome-jz01-45-v33.dts" target/linux/msm89xx/files/arch/arm64/boot/dts/qcom/
 
-# 4. Kernel Config LED Triggers
+# 4. Target Device Definition JZ01-45-V33
+patch -p1 < "$PROJECT_DIR/patches/805-add-jz0145-target-profile.patch" || true
+
+# 5. Kernel Config LED Triggers
 cat "$PROJECT_DIR/configs/kernel-led-triggers.conf" >> target/linux/msm89xx/config-6.12
 
 echo "[4/6] Updating Feeds..."
