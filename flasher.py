@@ -915,18 +915,27 @@ def main():
 
     # Menu Interaktif
     print()
-    print(f"{C_BOLD}{C_WHITE}[ MENU OPERASI BACKUP, RESTORE & EDL ]{C_RESET}")
-    print(f"  {C_CYAN}1.{C_RESET} Reboot modem ke Mode Qualcomm EDL 9008 (adb reboot edl)")
-    print(f"  {C_CYAN}2.{C_RESET} Backup Full eMMC (1 File Biner 4GB - edl rf) [PILIHAN 1 FILE]")
-    print(f"  {C_CYAN}3.{C_RESET} Restore Full eMMC (Flash Balik 1 File Biner 4GB - edl wf)")
-    print(f"  {C_CYAN}4.{C_RESET} Backup Seluruh Partisi eMMC per File + XML (edl rl --genxml)")
-    print(f"  {C_CYAN}5.{C_RESET} Backup Partisi Kritis NVRAM & IMEI saja (fsc, fsg, modemst1/2)")
-    print(f"  {C_CYAN}6.{C_RESET} Flash OpenWrt v25.12.5 ke UZ801 (Auto-Flash + Restore IMEI)")
-    print(f"  {C_CYAN}7.{C_RESET} Cek Varian Hardware Board & Alokasi GPIO LED (Device Tree)")
-    print(f"  {C_CYAN}8.{C_RESET} Patch Device Tree Board Baru (Fix LED Merah=GPIO25, Hijau=GPIO6, Biru=GPIO7)")
-    print(f"  {C_CYAN}9.{C_RESET} Restart / Reboot Modem dari Mode EDL ke Normal (edl reset)")
-    print(f"  {C_CYAN}10.{C_RESET} Cek Tabel Partisi eMMC (edl printgpt)")
-    print(f"  {C_CYAN}0.{C_RESET} Keluar")
+    print(f"{C_BOLD}{C_WHITE}[ MENU OPERASI QUALCOMM MSM8916 / OPENWRT ]{C_RESET}")
+    print(f"{C_DIM}--- [ DIAGNOSTIK & KONTROL MODE ] ---{C_RESET}")
+    print(f"  {C_CYAN}1.{C_RESET} Cek Status & Info Tabel Partisi eMMC (edl printgpt)")
+    print(f"  {C_CYAN}2.{C_RESET} Reboot Modem ke Mode EDL 9008 (adb reboot edl)")
+    print(f"  {C_CYAN}3.{C_RESET} Reboot Modem dari EDL ke Mode Normal (edl reset)")
+    print()
+    print(f"{C_DIM}--- [ BACKUP & PENYELAMATAN DATA ] ---{C_RESET}")
+    print(f"  {C_CYAN}4.{C_RESET} Backup Partisi Kritis IMEI & EFS (modemst1, modemst2, fsg, fsc)")
+    print(f"  {C_CYAN}5.{C_RESET} Backup Full eMMC RAW (1 File Biner 4GB - edl rf)")
+    print(f"  {C_CYAN}6.{C_RESET} Backup Seluruh Partisi Individual + rawprogram0.xml (edl rl --genxml)")
+    print()
+    print(f"{C_DIM}--- [ FLASHING & RESTORE ] ---{C_RESET}")
+    print(f"  {C_CYAN}7.{C_RESET} Flash OpenWrt Firmware (Kernel Baru, Netdev & SIM Trigger)")
+    print(f"  {C_CYAN}8.{C_RESET} Restore Partisi Kritis IMEI & EFS dari Backup")
+    print(f"  {C_CYAN}9.{C_RESET} Restore Full eMMC RAW (Flash Balik File 4GB - edl wf)")
+    print()
+    print(f"{C_DIM}--- [ HARDWARE & DEVICE TREE (DTS) ] ---{C_RESET}")
+    print(f"  {C_CYAN}10.{C_RESET} Cek Varian Hardware Board & Alokasi GPIO LED")
+    print(f"  {C_CYAN}11.{C_RESET} Patch Device Tree JZ01-45 (LED: R25, G6, B7 | SIM: 22,23,1,52)")
+    print()
+    print(f"  {C_WHITE}0.{C_RESET} Keluar")
     print()
 
     if not sys.stdin.isatty():
@@ -940,22 +949,72 @@ def main():
         sys.exit(0)
 
     try:
-        pilihan = input(f"{C_BOLD}{C_WHITE}Pilih operasi [0-10]: {C_RESET}").strip()
+        pilihan = input(f"{C_BOLD}{C_WHITE}Pilih operasi [0-11]: {C_RESET}").strip()
     except (KeyboardInterrupt, EOFError):
         print("\nDibatalkan.")
         sys.exit(0)
 
     if pilihan == "1":
+        if ensure_edl_mode(adb):
+            code, out = run_edl_cmd(["printgpt", f"--loader={args.loader}", "--memory=eMMC"])
+            print(out)
+    elif pilihan == "2":
         if is_edl:
             log(f"{SYM_INFO} Perangkat sudah berada di mode EDL 9008.")
         else:
             ensure_edl_mode(adb)
-    elif pilihan == "2":
+    elif pilihan == "3":
+        log(f"{SYM_ARROW} Mengirim perintah reboot normal ke modem via EDL...")
+        run_edl_cmd(["reset", f"--loader={args.loader}"])
+        log(f"{SYM_OK} {C_GREEN}Modem berhasil di-reboot ke mode operasional normal.{C_RESET}")
+    elif pilihan == "4":
+        if ensure_edl_mode(adb):
+            board_sel = select_board("1")
+            target_dir = os.path.join(PROJECT_DIR, board_sel["backup_dir"], f"nvram_{timestamp_str}")
+            do_backup_nvram(target_dir, args.loader)
+    elif pilihan == "5":
         if ensure_edl_mode(adb):
             board_sel = select_board("1")
             target_file = os.path.join(PROJECT_DIR, board_sel["backup_dir"], f"full_dump_{timestamp_str}.bin")
             do_backup_full(target_file, args.loader)
-    elif pilihan == "3":
+    elif pilihan == "6":
+        if ensure_edl_mode(adb):
+            target_dir = os.path.join(BACKUPS_DIR, f"partitions_{timestamp_str}")
+            do_backup_partitions(target_dir, args.loader)
+    elif pilihan == "7":
+        board_sel = select_board("1")
+        print()
+        log(f"{SYM_WARN} {C_YELLOW}PERSIAPAN FLASHING OPENWRT UNTUK: {board_sel['name']}{C_RESET}")
+        
+        do_backup = True
+        try:
+            bk_ans = input(f"{C_BOLD}{C_WHITE}Apakah ingin mem-backup partisi NVRAM/IMEI terlebih dahulu? (Y/n): {C_RESET}").strip().lower()
+            if bk_ans in ["n", "no"]:
+                do_backup = False
+        except (KeyboardInterrupt, EOFError):
+            do_backup = True
+
+        confirm = input(f"{C_RED}{C_BOLD}Lanjutkan proses flashing OpenWrt sekarang? (y/N): {C_RESET}").strip().lower()
+        if confirm in ["y", "yes"]:
+            if ensure_edl_mode(adb):
+                do_flash_openwrt(args.loader, board_sel, skip_backup=(not do_backup))
+        else:
+            log("Flashing OpenWrt dibatalkan.")
+    elif pilihan == "8":
+        print(f"\n{C_BOLD}{C_WHITE}[ RESTORE PARTISI KRITIS IMEI & EFS ]{C_RESET}")
+        board_sel = select_board("1")
+        b_dir = os.path.join(PROJECT_DIR, board_sel["backup_dir"])
+        if not os.path.exists(b_dir):
+            log(f"{SYM_FAIL} Direktori backup {b_dir} tidak ditemukan.")
+        else:
+            if ensure_edl_mode(adb):
+                for part in ["modemst1", "modemst2", "fsg", "fsc"]:
+                    p_file = os.path.join(b_dir, f"{part}.bin")
+                    if os.path.exists(p_file):
+                        log(f"{SYM_ARROW} Flashing partisi {part} dari {p_file}...")
+                        run_edl_cmd(["w", part, p_file, f"--loader={args.loader}"])
+                log(f"{SYM_OK} {C_GREEN}Restore partisi EFS/IMEI selesai.{C_RESET}")
+    elif pilihan == "9":
         # Cari file dump yang tersedia di folder backups
         available_bins = []
         if os.path.exists(BACKUPS_DIR):
@@ -990,48 +1049,12 @@ def main():
                 log("Restore dibatalkan.")
         else:
             log(f"{SYM_FAIL} Path file tidak valid atau tidak ditemukan.")
-    elif pilihan == "4":
-        if ensure_edl_mode(adb):
-            target_dir = os.path.join(BACKUPS_DIR, f"partitions_{timestamp_str}")
-            do_backup_partitions(target_dir, args.loader)
-    elif pilihan == "5":
-        if ensure_edl_mode(adb):
-            board_sel = select_board("1")
-            target_dir = os.path.join(PROJECT_DIR, board_sel["backup_dir"], f"nvram_{timestamp_str}")
-            do_backup_nvram(target_dir, args.loader)
-    elif pilihan == "6":
-        board_sel = select_board("1")
-        print()
-        log(f"{SYM_WARN} {C_YELLOW}PERSIAPAN FLASHING OPENWRT UNTUK: {board_sel['name']}{C_RESET}")
-        
-        do_backup = True
-        try:
-            bk_ans = input(f"{C_BOLD}{C_WHITE}Apakah ingin mem-backup partisi NVRAM/IMEI terlebih dahulu? (Y/n): {C_RESET}").strip().lower()
-            if bk_ans in ["n", "no"]:
-                do_backup = False
-        except (KeyboardInterrupt, EOFError):
-            do_backup = True
-
-        confirm = input(f"{C_RED}{C_BOLD}Lanjutkan proses flashing OpenWrt sekarang? (y/N): {C_RESET}").strip().lower()
-        if confirm in ["y", "yes"]:
-            if ensure_edl_mode(adb):
-                do_flash_openwrt(args.loader, board_sel, skip_backup=(not do_backup))
-        else:
-            log("Flashing OpenWrt dibatalkan.")
-    elif pilihan == "7":
-        if ensure_edl_mode(adb):
-            do_check_board(args.loader)
-    elif pilihan == "8":
-        if ensure_edl_mode(adb):
-            do_patch_board(args.loader)
-    elif pilihan == "9":
-        log(f"{SYM_ARROW} Mengirim perintah reboot normal ke modem via EDL...")
-        run_edl_cmd(["reset", f"--loader={args.loader}"])
-        log(f"{SYM_OK} {C_GREEN}Modem berhasil di-reboot ke mode operasional normal.{C_RESET}")
     elif pilihan == "10":
         if ensure_edl_mode(adb):
-            code, out = run_edl_cmd(["printgpt", f"--loader={args.loader}", "--memory=eMMC"])
-            print(out)
+            do_check_board(args.loader)
+    elif pilihan == "11":
+        if ensure_edl_mode(adb):
+            do_patch_board(args.loader)
     else:
         log("Keluar.")
 
