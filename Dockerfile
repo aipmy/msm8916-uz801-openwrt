@@ -36,6 +36,7 @@ RUN apt-get update && apt-get install -y \
     python3-cryptography \
     python3-pycryptodome \
     python3-pyasn1-modules \
+    bc \
     && rm -rf /var/lib/apt/lists/*
 
 RUN locale-gen en_US.UTF-8

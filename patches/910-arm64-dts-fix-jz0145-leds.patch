@@ -1,6 +1,6 @@
 --- a/arch/arm64/boot/dts/qcom/msm8916-yiming-uz801v3.dts
 +++ b/arch/arm64/boot/dts/qcom/msm8916-yiming-uz801v3.dts
-@@ -7,29 +7,29 @@
+@@ -7,29 +7,32 @@
  / {
 -	model = "uz801 v3.0 4G Modem Stick";
 -	compatible = "yiming,uz801-v3", "qcom,msm8916";
@@ -16,16 +16,19 @@
  &led_b {
 -	gpios = <&tlmm 6 GPIO_ACTIVE_HIGH>;
 +	gpios = <&tlmm 7 GPIO_ACTIVE_HIGH>;
++	default-state = "off";
  };
  
  &led_g {
 -	gpios = <&tlmm 8 GPIO_ACTIVE_HIGH>;
 +	gpios = <&tlmm 6 GPIO_ACTIVE_HIGH>;
++	default-state = "off";
  };
  
  &led_r {
 -	gpios = <&tlmm 7 GPIO_ACTIVE_HIGH>;
 +	gpios = <&tlmm 25 GPIO_ACTIVE_HIGH>;
++	default-state = "off";
  };
  
  &button_default {

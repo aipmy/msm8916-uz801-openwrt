@@ -29,7 +29,7 @@
 	color = <LED_COLOR_ID_GREEN>;
 	function = LED_FUNCTION_WAN;
 	gpios = <&tlmm 6 GPIO_ACTIVE_HIGH>;
-	default-state = "on";
+	default-state = "off";
 };
 
 &led_b {

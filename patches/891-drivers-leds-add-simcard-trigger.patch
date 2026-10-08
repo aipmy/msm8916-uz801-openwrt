@@ -14,8 +14,8 @@
  endif # LEDS_TRIGGERS
 --- a/drivers/leds/trigger/Makefile
 +++ b/drivers/leds/trigger/Makefile
-@@ -16,3 +16,4 @@ obj-$(CONFIG_LEDS_TRIGGER_CAMERA)	+= ledtrig-camera.o
- obj-$(CONFIG_LEDS_TRIGGER_PANIC)	+= ledtrig-panic.o
- obj-$(CONFIG_LEDS_TRIGGER_NETDEV)	+= ledtrig-netdev.o
- obj-$(CONFIG_LEDS_TRIGGER_PATTERN)	+= ledtrig-pattern.o
+@@ -18,3 +18,4 @@ obj-$(CONFIG_LEDS_TRIGGER_PATTERN)	+= le
+ obj-$(CONFIG_LEDS_TRIGGER_TTY)		+= ledtrig-tty.o
+ obj-$(CONFIG_LEDS_TRIGGER_INPUT_EVENTS)	+= ledtrig-input-events.o
+ obj-$(CONFIG_LEDS_TRIGGER_NETWORK)	+= ledtrig-network.o
 +obj-$(CONFIG_LEDS_TRIGGER_SIMCARD)	+= ledtrig-sim.o
