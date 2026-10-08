@@ -1,6 +1,6 @@
 # Backups Directory
 
-Tempat penyimpanan backup partisi dan kalibrasi radio/modem:
-- EFS partitions: `modemst1.bin`, `modemst2.bin`, `fsg.bin`, `fsc.bin`
-- QCN / XQCN (QPST NV item backup)
-- Bootloader / partition table dumps (`gpt_both0.bin`)
+Storage directory for device partition dumps, NVRAM, and radio calibration backups:
+- EFS critical partitions: `modemst1.bin`, `modemst2.bin`, `fsg.bin`, `fsc.bin`
+- NV items / calibration dumps
+- Partition table dumps (`gpt_both0.bin`, `rawprogram0.xml`)

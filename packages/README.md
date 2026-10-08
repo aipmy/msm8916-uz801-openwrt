@@ -1,7 +1,6 @@
 # Packages Directory
 
-Simpan file paket offline (.apk / .ipk) untuk arsitektur aarch64 OpenWrt di sini.
-Contoh:
-- Luci web interface
-- Modemmanager / uqmi / qmicli
-- USB network drivers (kmod-usb-net-rndis, kmod-usb-net-cdc-ether)
+Storage directory for offline packages (.apk / .ipk) targeted for the OpenWrt aarch64 architecture:
+- LuCI Web UI and theme packages
+- ModemManager, libqmi, libmbim, SMS utilities
+- Network drivers (`kmod-ledtrig-netdev`, `kmod-zram`, USB networking)

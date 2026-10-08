@@ -1,8 +1,7 @@
 # Firmware Directory
 
-Simpan image OpenWrt untuk flashing MSM8916 di sini:
-- `openwrt-jz01-45-v33-boot.img`
-- `openwrt-thwc-uf896-boot.img`
-- `openwrt-thwc-ufi001c-boot.img`
-- `openwrt-fy-mf800-boot.img`
-- `openwrt-rootfs.img` (atau `rootfs.ext4`)
+Store OpenWrt build artifacts and raw firmware images for Qualcomm MSM8916 modems here:
+- `openwrt-msm89xx-msm8916-jz01-45-v33-squashfs-boot.img`
+- `openwrt-msm89xx-msm8916-jz01-45-v33-squashfs-system.img`
+- `openwrt-msm89xx-msm8916-jz01-45-v33-squashfs-gpt_both0.bin`
+- `openwrt-msm89xx-msm8916-jz01-45-v33-firmware.zip`

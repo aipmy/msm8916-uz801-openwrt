@@ -37,14 +37,14 @@ def check_edl_device() -> bool:
             check=True,
         )
         if "QHSUSB__BULK" in res.stdout or "9008" in res.stdout:
-            print("[OK] Perangkat Qualcomm EDL 9008 terdeteksi!")
+            print("[OK] Qualcomm EDL 9008 device detected!")
             return True
         else:
-            print("[WAIT] Perangkat belum dalam mode EDL 9008.")
-            print("Silakan cabut dongle, tahan tombol Reset, lalu colokkan kembali ke USB.")
+            print("[WAIT] Device is not in EDL 9008 mode yet.")
+            print("Please unplug dongle, hold Reset button, and plug it back into USB.")
             return False
     except Exception as e:
-        print(f"[ERROR] Gagal membaca USB registry: {e}")
+        print(f"[ERROR] Failed to query USB registry: {e}")
         return False
 
 
