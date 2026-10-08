@@ -12,8 +12,6 @@ RUN apt-get update && apt-get install -y \
     bison \
     g++ \
     gawk \
-    gcc-multilib \
-    g++-multilib \
     gettext \
     git \
     libncurses-dev \
@@ -33,6 +31,10 @@ RUN apt-get update && apt-get install -y \
     subversion \
     sudo \
     locales \
+    fdisk \
+    gcc-arm-none-eabi \
+    python3-pycryptodome \
+    python3-pyasn1-modules \
     && rm -rf /var/lib/apt/lists/*
 
 RUN locale-gen en_US.UTF-8
