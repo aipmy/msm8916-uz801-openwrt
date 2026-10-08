@@ -372,10 +372,18 @@ def do_flash_openwrt(loader: str, board_info: Optional[Dict[str, str]] = None, s
     target_backup_dir = os.path.join(PROJECT_DIR, board_info["backup_dir"])
     
     log(f"{SYM_INFO} Target Board Flashing: {C_WHITE}{board_info['name']}{C_RESET}")
-    boot_img = os.path.join(openwrt_dir, "openwrt-msm89xx-msm8916-yiming-uz801v3-squashfs-boot.img")
-    rootfs_img = os.path.join(openwrt_dir, "openwrt-msm89xx-msm8916-yiming-uz801v3-squashfs-system.img")
-    gpt_bin = os.path.join(openwrt_dir, "openwrt-msm89xx-msm8916-yiming-uz801v3-squashfs-gpt_both0.bin")
-    fw_zip = os.path.join(openwrt_dir, "openwrt-msm89xx-msm8916-yiming-uz801v3-firmware.zip")
+    # Cek preferensi file khusus JZ01-45-V33 terlebih dahulu
+    jz_boot = os.path.join(openwrt_dir, "openwrt-msm89xx-msm8916-jz01-45-v33-squashfs-boot.img")
+    if os.path.exists(jz_boot):
+        boot_img = jz_boot
+        rootfs_img = os.path.join(openwrt_dir, "openwrt-msm89xx-msm8916-jz01-45-v33-squashfs-system.img")
+        gpt_bin = os.path.join(openwrt_dir, "openwrt-msm89xx-msm8916-jz01-45-v33-squashfs-gpt_both0.bin")
+        fw_zip = os.path.join(openwrt_dir, "openwrt-msm89xx-msm8916-jz01-45-v33-firmware.zip")
+    else:
+        boot_img = os.path.join(openwrt_dir, "openwrt-msm89xx-msm8916-yiming-uz801v3-squashfs-boot.img")
+        rootfs_img = os.path.join(openwrt_dir, "openwrt-msm89xx-msm8916-yiming-uz801v3-squashfs-system.img")
+        gpt_bin = os.path.join(openwrt_dir, "openwrt-msm89xx-msm8916-yiming-uz801v3-squashfs-gpt_both0.bin")
+        fw_zip = os.path.join(openwrt_dir, "openwrt-msm89xx-msm8916-yiming-uz801v3-firmware.zip")
     tot_sectors = 7569408
 
     # 1. Verifikasi File Image

@@ -68,7 +68,9 @@
 	};
 };
 
-&modem {
-	pinctrl-0 = <&sim_ctrl_default>;
-	pinctrl-names = "default";
+&soc {
+	remoteproc@4080000 {
+		pinctrl-0 = <&sim_ctrl_default>;
+		pinctrl-names = "default";
+	};
 };

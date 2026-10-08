@@ -1,6 +1,11 @@
 --- a/arch/arm64/boot/dts/qcom/msm8916-yiming-uz801v3.dts
 +++ b/arch/arm64/boot/dts/qcom/msm8916-yiming-uz801v3.dts
-@@ -10,15 +10,15 @@
+@@ -7,29 +7,29 @@
+ / {
+-	model = "uz801 v3.0 4G Modem Stick";
+-	compatible = "yiming,uz801-v3", "qcom,msm8916";
++	model = "JZ01-45-V33 4G LTE USB Dongle";
++	compatible = "generic,jz01-45-v33", "yiming,uz801-v3", "qcom,msm8916";
  };
  
  &button_restart {
@@ -9,15 +14,18 @@
  };
  
  &led_b {
- 	gpios = <&tlmm 7 GPIO_ACTIVE_HIGH>;
+-	gpios = <&tlmm 6 GPIO_ACTIVE_HIGH>;
++	gpios = <&tlmm 7 GPIO_ACTIVE_HIGH>;
  };
-
+ 
  &led_g {
- 	gpios = <&tlmm 6 GPIO_ACTIVE_HIGH>;
+-	gpios = <&tlmm 8 GPIO_ACTIVE_HIGH>;
++	gpios = <&tlmm 6 GPIO_ACTIVE_HIGH>;
  };
-
+ 
  &led_r {
- 	gpios = <&tlmm 25 GPIO_ACTIVE_HIGH>;
+-	gpios = <&tlmm 7 GPIO_ACTIVE_HIGH>;
++	gpios = <&tlmm 25 GPIO_ACTIVE_HIGH>;
  };
  
  &button_default {
