@@ -2,6 +2,19 @@
 CONFIG_TARGET_msm89xx=y
 CONFIG_TARGET_msm89xx_msm8916=y
 CONFIG_TARGET_msm89xx_msm8916_DEVICE_jz01-45-v33=y
+CONFIG_TARGET_BOARD="msm89xx"
+CONFIG_TARGET_SUBTARGET="msm8916"
+CONFIG_TARGET_PROFILE="DEVICE_jz01-45-v33"
+CONFIG_TARGET_ARCH_PACKAGES="aarch64_generic"
+# CONFIG_TARGET_mediatek is not set
+CONFIG_USE_APK=y
+CONFIG_PACKAGE_apk-mbedtls=y
+
+# Crypto & SSL Defaults (Standardize on mbedtls / openssl to prevent wolfssl hash mismatch)
+CONFIG_PACKAGE_libmbedtls=y
+CONFIG_PACKAGE_wpad-basic-mbedtls=y
+# CONFIG_PACKAGE_wpad-basic-wolfssl is not set
+# CONFIG_PACKAGE_libwolfssl is not set
 
 # 1. Modem & Cellular Protocol Stack
 CONFIG_PACKAGE_modemmanager=y

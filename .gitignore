@@ -22,6 +22,7 @@ backups/efs/
 firmware/*.img
 firmware/*.bin
 firmware/*.mbn
+firmware/output/
 packages/*.apk
 packages/*.ipk
 !firmware/.gitkeep

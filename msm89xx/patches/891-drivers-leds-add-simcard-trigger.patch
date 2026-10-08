@@ -1,0 +1,21 @@
+--- a/drivers/leds/trigger/Kconfig
++++ b/drivers/leds/trigger/Kconfig
+@@ -140,4 +140,11 @@ config LEDS_TRIGGER_AUDIO
+ 	  This allows LEDs to be controlled by audio activity.
+ 	  If unsure, say N.
+ 
++config LEDS_TRIGGER_SIMCARD
++	tristate "LED SIM Card & Modem State Trigger"
++	depends on LEDS_TRIGGERS
++	help
++	  This allows LEDs to indicate SIM Card and modem states (missing, searching, ready).
++	  If unsure, say Y.
++
+ endif # LEDS_TRIGGERS
+--- a/drivers/leds/trigger/Makefile
++++ b/drivers/leds/trigger/Makefile
+@@ -18,3 +18,4 @@ obj-$(CONFIG_LEDS_TRIGGER_PATTERN)	+= le
+ obj-$(CONFIG_LEDS_TRIGGER_TTY)		+= ledtrig-tty.o
+ obj-$(CONFIG_LEDS_TRIGGER_INPUT_EVENTS)	+= ledtrig-input-events.o
+ obj-$(CONFIG_LEDS_TRIGGER_NETWORK)	+= ledtrig-network.o
++obj-$(CONFIG_LEDS_TRIGGER_SIMCARD)	+= ledtrig-sim.o

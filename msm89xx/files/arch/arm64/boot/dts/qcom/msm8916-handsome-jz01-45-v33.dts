@@ -1,0 +1,76 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/dts-v1/;
+
+#include "msm8916-ufi.dtsi"
+#include <dt-bindings/leds/common.h>
+
+/ {
+	model = "JZ01-45-V33 4G LTE USB Dongle";
+	compatible = "generic,jz01-45-v33", "thwc,ufi001c", "qcom,msm8916";
+};
+
+&button_restart {
+	gpios = <&tlmm 37 GPIO_ACTIVE_LOW>;
+};
+
+&button_default {
+	pins = "gpio37";
+	bias-pull-down;
+};
+
+&led_r {
+	color = <LED_COLOR_ID_RED>;
+	function = LED_FUNCTION_POWER;
+	gpios = <&tlmm 25 GPIO_ACTIVE_HIGH>;
+	default-state = "off";
+};
+
+&led_g {
+	color = <LED_COLOR_ID_GREEN>;
+	function = LED_FUNCTION_WAN;
+	gpios = <&tlmm 6 GPIO_ACTIVE_HIGH>;
+	default-state = "off";
+};
+
+&led_b {
+	color = <LED_COLOR_ID_BLUE>;
+	function = LED_FUNCTION_WLAN;
+	gpios = <&tlmm 7 GPIO_ACTIVE_HIGH>;
+	default-state = "off";
+};
+
+&gpio_leds_default {
+	pins = "gpio25", "gpio6", "gpio7";
+};
+
+&tlmm {
+	sim_ctrl_default: sim-ctrl-default-state {
+		esim-sel-pins {
+			pins = "gpio22", "gpio23";
+			function = "gpio";
+			bias-disable;
+			output-low;
+		};
+
+		sim-sel-pins {
+			pins = "gpio1";
+			function = "gpio";
+			bias-disable;
+			output-high;
+		};
+
+		sim-detect-pins {
+			pins = "gpio52";
+			function = "gpio";
+			bias-disable;
+			output-high;
+		};
+	};
+};
+
+&soc {
+	remoteproc@4080000 {
+		pinctrl-0 = <&sim_ctrl_default>;
+		pinctrl-names = "default";
+	};
+};
