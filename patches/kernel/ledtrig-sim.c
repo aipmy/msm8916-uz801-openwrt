@@ -22,13 +22,14 @@ struct sim_trig_data {
 	enum sim_state state;
 };
 
-static struct led_trigger *sim_led_trigger;
-
 static ssize_t sim_state_show(struct device *dev,
 			      struct device_attribute *attr, char *buf)
 {
 	struct led_classdev *led_cdev = dev_get_drvdata(dev);
-	struct sim_trig_data *data = led_trigger_get_drvdata(led_cdev);
+	struct sim_trig_data *data = led_get_trigger_data(led_cdev);
+
+	if (!data)
+		return sprintf(buf, "unknown\n");
 
 	switch (data->state) {
 	case SIM_STATE_MISSING:
@@ -47,8 +48,11 @@ static ssize_t sim_state_store(struct device *dev,
 			       const char *buf, size_t size)
 {
 	struct led_classdev *led_cdev = dev_get_drvdata(dev);
-	struct sim_trig_data *data = led_trigger_get_drvdata(led_cdev);
+	struct sim_trig_data *data = led_get_trigger_data(led_cdev);
 	unsigned long delay_on = 0, delay_off = 0;
+
+	if (!data)
+		return -EINVAL;
 
 	if (sysfs_streq(buf, "missing") || sysfs_streq(buf, "none")) {
 		data->state = SIM_STATE_MISSING;
@@ -66,7 +70,7 @@ static ssize_t sim_state_store(struct device *dev,
 		data->state = SIM_STATE_READY;
 		/* Solid on */
 		led_blink_set(led_cdev, &delay_on, &delay_off);
-		led_set_brightness_nosleep(led_cdev, led_cdev->max_brightness);
+		led_set_brightness(led_cdev, led_cdev->max_brightness);
 	} else {
 		return -EINVAL;
 	}
@@ -95,16 +99,16 @@ static int sim_trig_activate(struct led_classdev *led_cdev)
 	led_set_trigger_data(led_cdev, data);
 
 	/* Default state: missing (fast blink) */
-	led_set_brightness_nosleep(led_cdev, LED_OFF);
+	led_set_brightness(led_cdev, LED_OFF);
 	return 0;
 }
 
 static void sim_trig_deactivate(struct led_classdev *led_cdev)
 {
-	struct sim_trig_data *data = led_trigger_get_drvdata(led_cdev);
+	struct sim_trig_data *data = led_get_trigger_data(led_cdev);
 
 	if (data) {
-		led_set_brightness_nosleep(led_cdev, LED_OFF);
+		led_set_brightness(led_cdev, LED_OFF);
 		kfree(data);
 	}
 }
