@@ -10,31 +10,6 @@
   let lastCpuTotal = 0;
   let lastCpuIdle = 0;
 
-  // LuCI RPC Call declarations
-  const callGetSensors = L.rpc.declare({
-    object: "luci.proton-temp",
-    method: "getSensors",
-    expect: { sensors: [] }
-  });
-
-  const callCpuStat = L.rpc.declare({
-    object: "luci.proton-cpu",
-    method: "getStat",
-    expect: { total: 0, idle: 0 }
-  });
-
-  const callSystemInfo = L.rpc.declare({
-    object: "system",
-    method: "info",
-    expect: {}
-  });
-
-  const callDHCPLeases = L.rpc.declare({
-    object: "luci-rpc",
-    method: "getDHCPLeases",
-    expect: { dhcp_leases: [] }
-  });
-
   function createStatusBar() {
     if (document.getElementById("proton-statusbar")) return;
 
@@ -47,7 +22,7 @@
     bar.innerHTML = `
       <div class="proton-statusbar-inner">
         <!-- Signal / Operator (Dynamic Ladder Icon) -->
-        <a class="proton-status-item" id="sb-sim" href="${L.url('admin/modem/5gmodem/detail')}" title="Cellular Status & Modem">
+        <a class="proton-status-item" id="sb-sim" href="${window.L ? L.url('admin/modem/5gmodem/detail') : '/cgi-bin/luci/admin/modem/5gmodem/detail'}" title="Cellular Status & Modem">
           <svg class="sb-icon" id="sb-sig-icon" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
             <rect x="2" y="17" width="3.5" height="5" rx="1" opacity="0.3" id="sb-bar-1"></rect>
             <rect x="7.5" y="13" width="3.5" height="9" rx="1" opacity="0.3" id="sb-bar-2"></rect>
@@ -59,7 +34,7 @@
         </a>
 
         <!-- SMS -->
-        <a class="proton-status-item" id="sb-sms" href="${L.url('admin/modem/5gmodem/readsms')}" title="SMS Messages">
+        <a class="proton-status-item" id="sb-sms" href="${window.L ? L.url('admin/modem/5gmodem/readsms') : '/cgi-bin/luci/admin/modem/5gmodem/readsms'}" title="SMS Messages">
           <svg class="sb-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
           </svg>
@@ -67,7 +42,7 @@
         </a>
 
         <!-- Temperature (Direct to Realtime / Sensors) -->
-        <a class="proton-status-item" id="sb-temp" href="${L.url('admin/status/realtime/temperature')}" title="Temperature Sensors">
+        <a class="proton-status-item" id="sb-temp" href="${window.L ? L.url('admin/status/realtime/temperature') : '/cgi-bin/luci/admin/status/realtime/temperature'}" title="Temperature Sensors">
           <svg class="sb-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"></path>
           </svg>
@@ -75,7 +50,7 @@
         </a>
 
         <!-- CPU Usage % -->
-        <a class="proton-status-item" id="sb-cpu" href="${L.url('admin/status/processes')}" title="CPU Usage">
+        <a class="proton-status-item" id="sb-cpu" href="${window.L ? L.url('admin/status/processes') : '/cgi-bin/luci/admin/status/processes'}" title="CPU Usage">
           <svg class="sb-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="4" y="4" width="16" height="16" rx="2"></rect>
             <rect x="9" y="9" width="6" height="6"></rect>
@@ -85,7 +60,7 @@
         </a>
 
         <!-- RAM Usage % -->
-        <a class="proton-status-item" id="sb-ram" href="${L.url('admin/status/overview')}" title="Memory Usage">
+        <a class="proton-status-item" id="sb-ram" href="${window.L ? L.url('admin/status/overview') : '/cgi-bin/luci/admin/status/overview'}" title="Memory Usage">
           <svg class="sb-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M6 19v-3 M10 19v-3 M14 19v-3 M18 19v-3 M4 11V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v5 M4 11h16v5H4z"></path>
           </svg>
@@ -93,7 +68,7 @@
         </a>
 
         <!-- Clients -->
-        <a class="proton-status-item" id="sb-clients" href="${L.url('admin/status/overview')}" title="Connected Clients">
+        <a class="proton-status-item" id="sb-clients" href="${window.L ? L.url('admin/status/overview') : '/cgi-bin/luci/admin/status/overview'}" title="Connected Clients">
           <svg class="sb-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
             <circle cx="9" cy="7" r="4"></circle>
@@ -152,6 +127,31 @@
 
   function fetchTelemetry() {
     createStatusBar();
+    if (!window.L || !window.L.rpc || !window.L.fs) return;
+
+    const callGetSensors = L.rpc.declare({
+      object: "luci.proton-temp",
+      method: "getSensors",
+      expect: { sensors: [] }
+    });
+
+    const callCpuStat = L.rpc.declare({
+      object: "luci.proton-cpu",
+      method: "getStat",
+      expect: { total: 0, idle: 0 }
+    });
+
+    const callSystemInfo = L.rpc.declare({
+      object: "system",
+      method: "info",
+      expect: {}
+    });
+
+    const callDHCPLeases = L.rpc.declare({
+      object: "luci-rpc",
+      method: "getDHCPLeases",
+      expect: { dhcp_leases: [] }
+    });
 
     Promise.all([
       L.resolveDefault(L.fs.read("/tmp/5gmodem/metrics_4080000_remoteproc_.json"), null),
@@ -252,7 +252,7 @@
     });
   }
 
-  function init() {
+  function start() {
     createStatusBar();
     fetchTelemetry();
     if (timerId) clearInterval(timerId);
@@ -260,8 +260,11 @@
   }
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
+    document.addEventListener("DOMContentLoaded", start);
   } else {
-    init();
+    start();
   }
+
+  // LuCI single-page view change support
+  window.addEventListener("luci-loaded", start);
 })();
