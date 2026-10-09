@@ -153,40 +153,22 @@
     });
 
     Promise.all([
-      L.resolveDefault(L.fs.read("/tmp/5gmodem/metrics_4080000_remoteproc_.json"), null),
+      L.resolveDefault(L.fs.read("/proc/stat"), null),
       L.resolveDefault(L.fs.read("/tmp/5gmodem/tele.json"), null),
       L.resolveDefault(callGetSensors(), { sensors: [] }),
-      L.resolveDefault(callCpuStat(), null),
       L.resolveDefault(callSystemInfo(), null),
       L.resolveDefault(callDHCPLeases(), { dhcp_leases: [] })
-    ]).then(([metricsRaw, teleRaw, tempRes, cpuStat, sysInfo, dhcpRes]) => {
-      let metrics = null;
-      try { metrics = JSON.parse(metricsRaw || "{}"); } catch(e) {}
+    ]).then(([procStatRaw, teleRaw, tempRes, sysInfo, dhcpRes]) => {
       let tele = null;
       try { tele = JSON.parse(teleRaw || "{}"); } catch(e) {}
 
       // 1. Update Cellular Signal & Operator Name
-      let oper = "";
-      if (metrics && metrics.operator_name && metrics.operator_name !== "-") {
-        oper = metrics.operator_name;
-      } else if (tele && tele.oper) {
-        oper = tele.oper;
-      }
-
-      let mode = "";
-      if (metrics && metrics.mode && metrics.mode !== "-") {
-        mode = metrics.mode;
-      } else if (tele && tele.mode) {
-        mode = tele.mode;
-      }
+      let oper = (tele && tele.oper) || "";
+      let mode = (tele && tele.mode) || "";
       if (mode.indexOf("|") >= 0) mode = mode.split("|")[0].trim();
 
       let sig = 0;
-      if (metrics && metrics.signal && metrics.signal !== "-" && metrics.signal !== "0") {
-        sig = parseInt(metrics.signal, 10);
-      } else if (metrics && metrics.csq && metrics.csq !== "-") {
-        sig = Math.round((parseInt(metrics.csq, 10) * 100) / 31);
-      } else if (tele && tele.sig !== undefined && tele.sig !== null) {
+      if (tele && tele.sig !== undefined && tele.sig !== null) {
         sig = parseInt(tele.sig, 10);
       }
       if (isNaN(sig) || sig < 0) sig = 0;
@@ -202,18 +184,16 @@
       }
       updateSignalLadder(sig);
 
-      // 2. Update SMS
-      let smsCount = 0;
-      if (tele && tele.sms !== undefined && tele.sms !== null) {
-        smsCount = tele.sms;
-      }
+      // 2. Update SMS Count
+      let smsCount = (tele && tele.sms !== undefined && tele.sms !== null) ? tele.sms : 0;
       const smsEl = document.getElementById("sb-sms-count");
       if (smsEl) smsEl.textContent = smsCount;
 
-      // 3. Update Temperature (Convert mili-degree to °C from kernel sensor)
+      // 3. Update Temperature from kernel sensor (Converted from m°C)
       let curTemp = null;
-      if (tempRes && tempRes.sensors && tempRes.sensors.length > 0) {
-        tempRes.sensors.forEach(s => {
+      let sensorsList = Array.isArray(tempRes) ? tempRes : (tempRes && tempRes.sensors ? tempRes.sensors : []);
+      if (sensorsList.length > 0) {
+        sensorsList.forEach(s => {
           let t = +s.temp;
           if (!isNaN(t)) {
             if (t > 1000) t = t / 1000;
@@ -233,23 +213,36 @@
       }
 
 
-      // 4. Update CPU Usage Percentage
-      if (cpuStat && cpuStat.total && cpuStat.idle) {
-        if (lastCpuTotal > 0) {
-          const totalDiff = cpuStat.total - lastCpuTotal;
-          const idleDiff = cpuStat.idle - lastCpuIdle;
-          if (totalDiff > 0) {
-            const usage = Math.round(100 * (1 - (idleDiff / totalDiff)));
-            const cpuEl = document.getElementById("sb-cpu-val");
-            if (cpuEl) {
-              cpuEl.textContent = `${usage}%`;
-              cpuEl.className = "sb-badge " + (usage >= 85 ? "badge-danger" : usage >= 65 ? "badge-warning" : "badge-normal");
+      // 4. Update CPU Usage Percentage from /proc/stat
+      if (procStatRaw) {
+        const firstLine = procStatRaw.split("\n")[0] || "";
+        const parts = firstLine.trim().split(/\s+/);
+        if (parts.length >= 5) {
+          let total = 0;
+          for (let i = 1; i < parts.length; i++) total += (+parts[i] || 0);
+          let idle = (+parts[4] || 0) + (+parts[5] || 0);
+
+          if (lastCpuTotal > 0) {
+            const totalDiff = total - lastCpuTotal;
+            const idleDiff = idle - lastCpuIdle;
+            if (totalDiff > 0) {
+              const usage = Math.max(0, Math.min(100, Math.round(100 * (1 - (idleDiff / totalDiff)))));
+              const cpuEl = document.getElementById("sb-cpu-val");
+              if (cpuEl) {
+                cpuEl.textContent = `${usage}%`;
+                cpuEl.className = "sb-badge " + (usage >= 85 ? "badge-danger" : usage >= 65 ? "badge-warning" : "badge-normal");
+              }
             }
           }
+          lastCpuTotal = total;
+          lastCpuIdle = idle;
         }
-        lastCpuTotal = cpuStat.total;
-        lastCpuIdle = cpuStat.idle;
+      } else if (sysInfo && sysInfo.load && sysInfo.load.length) {
+        const loadPct = Math.min(100, Math.round((sysInfo.load[0] / 65535) * 100));
+        const cpuEl = document.getElementById("sb-cpu-val");
+        if (cpuEl) cpuEl.textContent = `${loadPct}%`;
       }
+
 
       // 5. Update RAM Usage %
       if (sysInfo && sysInfo.memory) {

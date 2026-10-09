@@ -51,10 +51,17 @@
                 ],
                 "/proc/cpuinfo": [
                     "read"
+                ],
+                "/proc/stat": [
+                    "read"
+                ],
+                "/tmp/5gmodem/*": [
+                    "read"
                 ]
             }
         },
         "write": {
+
             "ubus": {
                 "luci.proton-temp": [
                     "setThresholds"
