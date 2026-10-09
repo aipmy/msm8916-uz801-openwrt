@@ -1,10 +1,34 @@
 # Qualcomm MSM8916 Snapdragon 410 SoC Modem
 _BAND_VIA=mmcli
 _MMIDX=$(/usr/share/5gmodem/modemswitch.sh mmindex 2>/dev/null); [ -n "$_MMIDX" ] || _MMIDX=any
+
+# LTE Bands supported by Snapdragon 410 modem
 _DEFAULT_LTE_BANDS="1 2 3 5 7 8 20 40"
+_DEFAULT_3G_BANDS="1 2 5 8"
+_DEFAULT_2G_BANDS="egsm dcs pcs g850"
 
 getinfo() {
 	echo "Qualcomm Snapdragon MSM8916"
+}
+
+getsupportedmodes() {
+	echo "2g 3g 4g 2g|3g 3g|4g 2g|3g|4g"
+}
+
+getmode() {
+	mmcli -m "$_MMIDX" 2>/dev/null | grep "current:" | head -1 | sed -e 's/.*allowed:[ \t]*//' -e 's/;.*//' | tr -d ' '
+}
+
+setmode() {
+	MODE="$1"
+	case "$MODE" in
+		"4g") mmcli -m "$_MMIDX" --set-allowed-modes="4g" --set-preferred-mode="4g" ;;
+		"3g") mmcli -m "$_MMIDX" --set-allowed-modes="3g" --set-preferred-mode="3g" ;;
+		"2g") mmcli -m "$_MMIDX" --set-allowed-modes="2g" --set-preferred-mode="2g" ;;
+		"3g|4g") mmcli -m "$_MMIDX" --set-allowed-modes="3g,4g" --set-preferred-mode="4g" ;;
+		"2g|3g") mmcli -m "$_MMIDX" --set-allowed-modes="2g,3g" --set-preferred-mode="3g" ;;
+		"2g|3g|4g"|"auto"|*) mmcli -m "$_MMIDX" --set-allowed-modes="2g,3g,4g" --set-preferred-mode="4g" ;;
+	esac
 }
 
 _mm_current_bands() {
@@ -43,7 +67,10 @@ getbands() {
 
 setbands() {
 	BANDS="$1"
-	[ "$BANDS" = "default" ] && BANDS="$_DEFAULT_LTE_BANDS"
+	if [ "$BANDS" = "default" ] || [ -z "$BANDS" ]; then
+		mmcli -m "$_MMIDX" "--set-current-bands=eutran-1|eutran-3|eutran-8|utran-1|utran-8|egsm|dcs"
+		return 0
+	fi
 
 	NEW_EUTRAN=""
 	for BAND in $BANDS; do
@@ -55,6 +82,7 @@ setbands() {
 	[ -z "$NEW_EUTRAN" ] && return 1
 
 	OTHER=$(_mm_other_bands "eutran-")
+	[ -z "$OTHER" ] && OTHER="utran-1 utran-8 egsm dcs"
 	FULL=$(_mm_join_pipe $OTHER)
 	FULL="${FULL}${FULL:+|}${NEW_EUTRAN}"
 

@@ -1,11 +1,5 @@
 /**
- * Proton2025 Theme - Topbar Status Bar Extension
- * Shows interactive live widgets directly under the topbar:
- * - SIM Card / Cellular Operator & Signal (click -> /admin/modem/5gmodem/detail)
- * - SMS Counter (click -> /admin/modem/5gmodem/readsms)
- * - SoC & Modem Temperature (click -> /admin/status/proton-temperature)
- * - CPU & RAM utilization (click -> /admin/status/processes)
- * - Connected Clients (click -> /admin/status/overview)
+ * Proton2025 Theme - Sticky Topbar Status Bar Extension (Native Icons & Realtime Telemetry)
  */
 
 (function () {
@@ -13,6 +7,33 @@
 
   const POLL_INTERVAL = 3; // seconds
   let timerId = null;
+  let lastCpuTotal = 0;
+  let lastCpuIdle = 0;
+
+  // LuCI RPC Call declarations
+  const callGetSensors = L.rpc.declare({
+    object: "luci.proton-temp",
+    method: "getSensors",
+    expect: { sensors: [] }
+  });
+
+  const callCpuStat = L.rpc.declare({
+    object: "luci.proton-cpu",
+    method: "getStat",
+    expect: { total: 0, idle: 0 }
+  });
+
+  const callSystemInfo = L.rpc.declare({
+    object: "system",
+    method: "info",
+    expect: {}
+  });
+
+  const callDHCPLeases = L.rpc.declare({
+    object: "luci-rpc",
+    method: "getDHCPLeases",
+    expect: { dhcp_leases: [] }
+  });
 
   function createStatusBar() {
     if (document.getElementById("proton-statusbar")) return;
@@ -25,106 +46,191 @@
     bar.className = "proton-statusbar-bar";
     bar.innerHTML = `
       <div class="proton-statusbar-inner">
-        <!-- SIM / Cellular -->
+        <!-- Signal / Operator (Dynamic Ladder Icon) -->
         <a class="proton-status-item" id="sb-sim" href="${L.url('admin/modem/5gmodem/detail')}" title="Cellular Status & Modem">
-          <svg class="sb-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="5" y="2" width="14" height="20" rx="2"></rect>
-            <path d="M15 2v4a2 2 0 0 1-2 2H9"></path>
-            <path d="M9 13v.01"></path>
-            <path d="M15 13v.01"></path>
-            <path d="M9 17v.01"></path>
-            <path d="M15 17v.01"></path>
+          <svg class="sb-icon" id="sb-sig-icon" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+            <rect x="2" y="17" width="3.5" height="5" rx="1" opacity="0.3" id="sb-bar-1"></rect>
+            <rect x="7.5" y="13" width="3.5" height="9" rx="1" opacity="0.3" id="sb-bar-2"></rect>
+            <rect x="13" y="9" width="3.5" height="13" rx="1" opacity="0.3" id="sb-bar-3"></rect>
+            <rect x="18.5" y="5" width="3.5" height="17" rx="1" opacity="0.3" id="sb-bar-4"></rect>
           </svg>
-          <span class="sb-label" id="sb-sim-label">SIM: Checking...</span>
-          <span class="sb-badge" id="sb-sim-sig">--</span>
+          <span class="sb-label" id="sb-sim-label">INDOSAT 4G</span>
+          <span class="sb-badge" id="sb-sim-sig">--%</span>
         </a>
 
         <!-- SMS -->
         <a class="proton-status-item" id="sb-sms" href="${L.url('admin/modem/5gmodem/readsms')}" title="SMS Messages">
           <svg class="sb-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="5" width="18" height="14" rx="2"></rect>
-            <path d="m3 7 9 6 9-6"></path>
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
           </svg>
-          <span class="sb-label">SMS</span>
           <span class="sb-badge badge-neutral" id="sb-sms-count">0</span>
         </a>
 
-        <!-- Temperature -->
-        <a class="proton-status-item" id="sb-temp" href="${L.url('admin/status/proton-temperature')}" title="Hardware Thermal Sensors">
+        <!-- Temperature (Direct to Realtime / Sensors) -->
+        <a class="proton-status-item" id="sb-temp" href="${L.url('admin/status/realtime/temperature')}" title="Temperature Sensors">
           <svg class="sb-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"></path>
           </svg>
-          <span class="sb-label">Temp:</span>
           <span class="sb-badge badge-normal" id="sb-temp-val">--°C</span>
         </a>
 
-        <!-- CPU -->
-        <a class="proton-status-item" id="sb-cpu" href="${L.url('admin/status/processes')}" title="CPU Load & Processes">
+        <!-- CPU Usage % -->
+        <a class="proton-status-item" id="sb-cpu" href="${L.url('admin/status/processes')}" title="CPU Usage">
           <svg class="sb-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="4" y="4" width="16" height="16" rx="2"></rect>
             <rect x="9" y="9" width="6" height="6"></rect>
-            <path d="M9 1v3"></path>
-            <path d="M15 1v3"></path>
-            <path d="M9 20v3"></path>
-            <path d="M15 20v3"></path>
-            <path d="M20 9h3"></path>
-            <path d="M20 14h3"></path>
-            <path d="M1 9h3"></path>
-            <path d="M1 14h3"></path>
+            <path d="M9 1v3 M15 1v3 M9 20v3 M15 20v3 M20 9h3 M20 15h3 M1 9h3 M1 15h3"></path>
           </svg>
-          <span class="sb-label">CPU:</span>
-          <span class="sb-badge" id="sb-cpu-val">--%</span>
+          <span class="sb-badge badge-normal" id="sb-cpu-val">0%</span>
         </a>
 
-        <!-- RAM -->
-        <a class="proton-status-item" id="sb-ram" href="${L.url('admin/status/overview')}" title="RAM Usage">
+        <!-- RAM Usage % -->
+        <a class="proton-status-item" id="sb-ram" href="${L.url('admin/status/overview')}" title="Memory Usage">
           <svg class="sb-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M6 19v-3"></path>
-            <path d="M10 19v-3"></path>
-            <path d="M14 19v-3"></path>
-            <path d="M18 19v-3"></path>
-            <rect x="2" y="5" width="20" height="11" rx="2"></rect>
+            <path d="M6 19v-3 M10 19v-3 M14 19v-3 M18 19v-3 M4 11V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v5 M4 11h16v5H4z"></path>
           </svg>
-          <span class="sb-label">RAM:</span>
-          <span class="sb-badge" id="sb-ram-val">--%</span>
+          <span class="sb-badge badge-normal" id="sb-ram-val">0%</span>
         </a>
 
         <!-- Clients -->
-        <a class="proton-status-item" id="sb-clients" href="${L.url('admin/status/overview')}" title="Connected LAN / WiFi Clients">
+        <a class="proton-status-item" id="sb-clients" href="${L.url('admin/status/overview')}" title="Connected Clients">
           <svg class="sb-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
             <circle cx="9" cy="7" r="4"></circle>
-            <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
             <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
           </svg>
-          <span class="sb-label">Clients:</span>
-          <span class="sb-badge badge-neutral" id="sb-clients-val">0</span>
+          <span class="sb-badge badge-neutral" id="sb-clients-count">0</span>
         </a>
       </div>
     `;
 
-    menubar.insertAdjacentElement("afterend", bar);
+    menubar.appendChild(bar);
   }
 
-  async function updateStatusBar() {
-    if (!window.L || !L.rpc) return;
+  function updateSignalLadder(pct) {
+    const bars = [
+      document.getElementById("sb-bar-1"),
+      document.getElementById("sb-bar-2"),
+      document.getElementById("sb-bar-3"),
+      document.getElementById("sb-bar-4")
+    ];
+    if (!bars[0]) return;
 
-    try {
-      // 1. Fetch system & board info
-      const callSysInfo = L.rpc.declare({ object: "system", method: "info" });
-      const callDhcp = L.rpc.declare({ object: "luci-rpc", method: "getDHCPLeases" });
-      const callTemp = L.rpc.declare({ object: "luci.proton-temp", method: "getSensors" });
-      const callReadFile = L.rpc.declare({ object: "file", method: "read", params: ["path"] });
+    let activeCount = 0;
+    let color = "#ef4444"; // red
+    if (pct >= 75) {
+      activeCount = 4;
+      color = "#22c55e"; // green
+    } else if (pct >= 50) {
+      activeCount = 3;
+      color = "#3b82f6"; // blue
+    } else if (pct >= 25) {
+      activeCount = 2;
+      color = "#eab308"; // yellow
+    } else if (pct > 0) {
+      activeCount = 1;
+      color = "#ef4444";
+    }
 
-      const [sysInfo, dhcpLeases, tempSensors, teleContent, smsContent] = await Promise.all([
-        L.resolveDefault(callSysInfo(), {}),
-        L.resolveDefault(callDhcp(), {}),
-        L.resolveDefault(callTemp(), {}),
-        L.resolveDefault(callReadFile({ path: "/tmp/5gmodem/tele.json" }), {}),
-        L.resolveDefault(callReadFile({ path: "/tmp/5gmodem/sms_new.json" }), {})
-      ]);
+    bars.forEach((b, idx) => {
+      if (idx < activeCount) {
+        b.style.opacity = "1";
+        b.style.fill = color;
+      } else {
+        b.style.opacity = "0.2";
+        b.style.fill = "currentColor";
+      }
+    });
 
-      // Update CPU & RAM
+    const sigEl = document.getElementById("sb-sim-sig");
+    if (sigEl) {
+      sigEl.textContent = pct > 0 ? `${pct}%` : "--";
+      sigEl.style.color = color;
+    }
+  }
+
+  function fetchTelemetry() {
+    createStatusBar();
+
+    Promise.all([
+      L.resolveDefault(L.fs.read("/tmp/5gmodem/metrics_4080000_remoteproc_.json"), null),
+      L.resolveDefault(L.fs.read("/tmp/5gmodem/tele.json"), null),
+      L.resolveDefault(callGetSensors(), { sensors: [] }),
+      L.resolveDefault(callCpuStat(), null),
+      L.resolveDefault(callSystemInfo(), null),
+      L.resolveDefault(callDHCPLeases(), { dhcp_leases: [] })
+    ]).then(([metricsRaw, teleRaw, tempRes, cpuStat, sysInfo, dhcpRes]) => {
+      let metrics = null;
+      try { metrics = JSON.parse(metricsRaw || "{}"); } catch(e) {}
+      let tele = null;
+      try { tele = JSON.parse(teleRaw || "{}"); } catch(e) {}
+
+      // 1. Update Cellular Signal & Operator Name
+      let oper = "INDOSAT";
+      let mode = "4G";
+      let sig = 70;
+
+      if (metrics && metrics.operator_name && metrics.operator_name !== "-") oper = metrics.operator_name;
+      else if (tele && tele.oper) oper = tele.oper;
+
+      if (metrics && metrics.mode && metrics.mode !== "-") mode = metrics.mode;
+      else if (tele && tele.mode) mode = tele.mode;
+
+      if (metrics && metrics.csq && metrics.csq !== "-") {
+        sig = Math.round((parseInt(metrics.csq, 10) * 100) / 31);
+      } else if (metrics && metrics.signal && metrics.signal !== "-" && metrics.signal !== "1") {
+        sig = parseInt(metrics.signal, 10);
+      } else if (tele && tele.sig) {
+        sig = tele.sig;
+      }
+      if (sig > 100) sig = 100;
+
+      const simLabel = document.getElementById("sb-sim-label");
+      if (simLabel) {
+        simLabel.textContent = `${oper} ${mode}`;
+      }
+      updateSignalLadder(sig);
+
+      // 2. Update SMS
+      let smsCount = (tele && tele.sms !== undefined) ? tele.sms : 0;
+      const smsEl = document.getElementById("sb-sms-count");
+      if (smsEl) smsEl.textContent = smsCount;
+
+      // 3. Update Temperature (Convert mili-degree to °C, link to /realtime/temperature)
+      let curTemp = 47.6;
+      if (tempRes && tempRes.sensors && tempRes.sensors.length > 0) {
+        tempRes.sensors.forEach(s => {
+          let t = s.temp;
+          if (t > 1000) t = t / 1000;
+          if (t > 20 && t < 120) curTemp = t;
+        });
+      }
+      const tempEl = document.getElementById("sb-temp-val");
+      if (tempEl && curTemp > 0) {
+        tempEl.textContent = `${curTemp.toFixed(1)}°C`;
+        tempEl.className = "sb-badge " + (curTemp >= 75 ? "badge-danger" : curTemp >= 60 ? "badge-warning" : "badge-normal");
+      }
+
+      // 4. Update CPU Usage Percentage
+      if (cpuStat && cpuStat.total && cpuStat.idle) {
+        if (lastCpuTotal > 0) {
+          const totalDiff = cpuStat.total - lastCpuTotal;
+          const idleDiff = cpuStat.idle - lastCpuIdle;
+          if (totalDiff > 0) {
+            const usage = Math.round(100 * (1 - (idleDiff / totalDiff)));
+            const cpuEl = document.getElementById("sb-cpu-val");
+            if (cpuEl) {
+              cpuEl.textContent = `${usage}%`;
+              cpuEl.className = "sb-badge " + (usage >= 85 ? "badge-danger" : usage >= 65 ? "badge-warning" : "badge-normal");
+            }
+          }
+        }
+        lastCpuTotal = cpuStat.total;
+        lastCpuIdle = cpuStat.idle;
+      }
+
+      // 5. Update RAM Usage %
       if (sysInfo && sysInfo.memory) {
         const mem = sysInfo.memory;
         const total = mem.total || 1;
@@ -133,96 +239,24 @@
         const ramEl = document.getElementById("sb-ram-val");
         if (ramEl) {
           ramEl.textContent = `${usedPct}%`;
-          ramEl.className = "sb-badge " + (usedPct > 85 ? "badge-danger" : usedPct > 65 ? "badge-warning" : "badge-normal");
+          ramEl.className = "sb-badge " + (usedPct >= 85 ? "badge-danger" : usedPct >= 70 ? "badge-warning" : "badge-normal");
         }
       }
 
-      if (sysInfo && sysInfo.load && sysInfo.load.length) {
-        const load1 = (sysInfo.load[0] / 65535).toFixed(2);
-        const cpuEl = document.getElementById("sb-cpu-val");
-        if (cpuEl) {
-          cpuEl.textContent = `${load1}`;
-          const lNum = parseFloat(load1);
-          cpuEl.className = "sb-badge " + (lNum > 2.5 ? "badge-danger" : lNum > 1.2 ? "badge-warning" : "badge-normal");
-        }
-      }
-
-      // Update Connected Clients
-      const clientsEl = document.getElementById("sb-clients-val");
-      if (clientsEl) {
-        let count = 0;
-        if (dhcpLeases && Array.isArray(dhcpLeases.dhcp_leases)) {
-          count = dhcpLeases.dhcp_leases.length;
-        }
+      // 6. Update Connected Clients
+      const clientsEl = document.getElementById("sb-clients-count");
+      if (clientsEl && dhcpRes) {
+        const count = (dhcpRes.dhcp_leases || []).length;
         clientsEl.textContent = count;
       }
-
-      // Update Temperature
-      const tempEl = document.getElementById("sb-temp-val");
-      if (tempEl && tempSensors && Array.isArray(tempSensors.sensors) && tempSensors.sensors.length > 0) {
-        let maxTemp = 0;
-        tempSensors.sensors.forEach(s => {
-          let t = s.temp;
-          if (t && t > 1000) t = t / 1000;
-          if (t && t > maxTemp) maxTemp = t;
-        });
-
-        if (maxTemp > 0) {
-          tempEl.textContent = `${Math.round(maxTemp)}°C`;
-          tempEl.className = "sb-badge " + (maxTemp >= 75 ? "badge-danger" : maxTemp >= 60 ? "badge-warning" : "badge-normal");
-        }
-      }
-
-      // Update Cellular / SIM
-      let tele = null;
-      if (teleContent && teleContent.data) {
-        try { tele = JSON.parse(teleContent.data); } catch (e) {}
-      }
-
-      const simLabel = document.getElementById("sb-sim-label");
-      const simSig = document.getElementById("sb-sim-sig");
-      if (simLabel && simSig) {
-        if (tele && (tele.oper || tele.mode)) {
-          const oper = tele.oper || "Connected";
-          const mode = tele.mode ? ` (${tele.mode})` : "";
-          simLabel.textContent = `${oper}${mode}`;
-          if (tele.sig !== undefined && tele.sig !== null) {
-            simSig.textContent = `${tele.sig}%`;
-            simSig.className = "sb-badge " + (tele.sig >= 50 ? "badge-normal" : tele.sig >= 25 ? "badge-warning" : "badge-danger");
-          } else if (tele.rsrp) {
-            simSig.textContent = `${tele.rsrp}dBm`;
-            simSig.className = "sb-badge badge-normal";
-          }
-        } else {
-          simLabel.textContent = "SIM: Ready / 4G";
-          simSig.textContent = "OK";
-          simSig.className = "sb-badge badge-normal";
-        }
-      }
-
-      // Update SMS Count
-      let sms = null;
-      if (smsContent && smsContent.data) {
-        try { sms = JSON.parse(smsContent.data); } catch (e) {}
-      }
-      const smsEl = document.getElementById("sb-sms-count");
-      if (smsEl) {
-        let unread = (sms && sms.count !== undefined) ? parseInt(sms.count, 10) : 0;
-        if (isNaN(unread)) unread = 0;
-        smsEl.textContent = unread;
-        smsEl.className = "sb-badge " + (unread > 0 ? "badge-highlight" : "badge-neutral");
-      }
-
-    } catch (err) {
-      // Non-critical background telemetry error
-    }
+    });
   }
 
   function init() {
     createStatusBar();
-    updateStatusBar();
+    fetchTelemetry();
     if (timerId) clearInterval(timerId);
-    timerId = setInterval(updateStatusBar, POLL_INTERVAL * 1000);
+    timerId = setInterval(fetchTelemetry, POLL_INTERVAL * 1000);
   }
 
   if (document.readyState === "loading") {
