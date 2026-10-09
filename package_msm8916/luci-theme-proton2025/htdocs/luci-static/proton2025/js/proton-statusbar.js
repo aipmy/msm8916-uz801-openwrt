@@ -29,7 +29,7 @@
             <rect x="13" y="9" width="3.5" height="13" rx="1" opacity="0.3" id="sb-bar-3"></rect>
             <rect x="18.5" y="5" width="3.5" height="17" rx="1" opacity="0.3" id="sb-bar-4"></rect>
           </svg>
-          <span class="sb-label" id="sb-sim-label">INDOSAT 4G</span>
+          <span class="sb-label" id="sb-sim-label">Modem</span>
         </a>
 
         <!-- SMS -->
@@ -45,7 +45,7 @@
           <svg class="sb-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"></path>
           </svg>
-          <span class="sb-badge badge-normal" id="sb-temp-val">--°C</span>
+          <span class="sb-badge" id="sb-temp-val">--°C</span>
         </a>
 
         <!-- CPU Usage % -->
@@ -55,7 +55,7 @@
             <rect x="9" y="9" width="6" height="6"></rect>
             <path d="M9 1v3 M15 1v3 M9 20v3 M15 20v3 M20 9h3 M20 15h3 M1 9h3 M1 15h3"></path>
           </svg>
-          <span class="sb-badge badge-normal" id="sb-cpu-val">0%</span>
+          <span class="sb-badge" id="sb-cpu-val">0%</span>
         </a>
 
         <!-- RAM Usage % -->
@@ -63,7 +63,7 @@
           <svg class="sb-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M6 19v-3 M10 19v-3 M14 19v-3 M18 19v-3 M4 11V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v5 M4 11h16v5H4z"></path>
           </svg>
-          <span class="sb-badge badge-normal" id="sb-ram-val">0%</span>
+          <span class="sb-badge" id="sb-ram-val">0%</span>
         </a>
 
         <!-- Clients -->
@@ -116,6 +116,12 @@
         b.style.fill = "currentColor";
       }
     });
+
+    const simLink = document.getElementById("sb-sim");
+    const sigIcon = document.getElementById("sb-sig-icon");
+    if (sigIcon) {
+      sigIcon.style.color = color;
+    }
   }
 
   function fetchTelemetry() {
@@ -160,14 +166,16 @@
       try { tele = JSON.parse(teleRaw || "{}"); } catch(e) {}
 
       // 1. Update Cellular Signal & Operator Name
-      let oper = (metrics && metrics.operator_name && metrics.operator_name !== "-") ? metrics.operator_name : ((tele && tele.oper) || "INDOSAT");
+      let oper = (metrics && metrics.operator_name && metrics.operator_name !== "-") ? metrics.operator_name : ((tele && tele.oper) || "Indosat Ooredoo");
       let mode = (metrics && metrics.mode && metrics.mode !== "-") ? metrics.mode : ((tele && tele.mode) || "4G");
-      let sig = 60;
+      // Clean up string like "LTE | B3 (1800 MHz)" -> "4G" or "LTE"
+      if (mode.indexOf("|") >= 0) mode = mode.split("|")[0].trim();
 
-      if (metrics && metrics.csq && metrics.csq !== "-") {
-        sig = Math.round((parseInt(metrics.csq, 10) * 100) / 31);
-      } else if (metrics && metrics.signal && metrics.signal !== "-" && metrics.signal !== "1") {
+      let sig = 50;
+      if (metrics && metrics.signal && metrics.signal !== "-" && metrics.signal !== "0") {
         sig = parseInt(metrics.signal, 10);
+      } else if (metrics && metrics.csq && metrics.csq !== "-") {
+        sig = Math.round((parseInt(metrics.csq, 10) * 100) / 31);
       } else if (tele && tele.sig) {
         sig = tele.sig;
       }
@@ -175,7 +183,7 @@
 
       const simLabel = document.getElementById("sb-sim-label");
       if (simLabel) {
-        simLabel.textContent = `${oper} ${mode}`;
+        simLabel.textContent = `${oper} (${mode})`;
       }
       updateSignalLadder(sig);
 

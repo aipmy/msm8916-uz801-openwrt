@@ -3153,7 +3153,13 @@ if { [ "$IFPROTO" = modemmanager ] || [ -n "$_MM_OWNS" ]; } && command -v mmcli 
 	if [ -n "$_MI" ]; then
 		_MK=$(mmcli -m "$_MI" -K 2>/dev/null)
 		_mmv() { _v=$(printf '%s\n' "$_MK" | grep -F "$1 " | head -1 | sed 's/^[^:]*:[[:space:]]*//'); [ "$_v" = "--" ] && _v=""; printf '%s' "$_v"; }
+		_mccmnc="$(_mmv "modem.3gpp.operator-code")"
+		if [ -n "$_mccmnc" ]; then
+			_dbop=$(awk -F';' -v k="$_mccmnc" '$1 == k { print $3 }' "$RES/mccmnc.dat" 2>/dev/null | head -1 | tr -d '\r' | xargs)
+			[ -n "$_dbop" ] && COPS="$_dbop"
+		fi
 		[ -z "$COPS" ]    && COPS=$(_mmv "modem.3gpp.operator-name")
+
 		# Процент из mmcli - ТОЛЬКО когда нет детальных метрик (RSRP): он у многих
 		# прошивок пессимистичен (Compal: 12% при RSRP -106), а при живом RSRP
 		# сигнал считает sig_percent ниже - как у всех остальных модемов.
