@@ -287,13 +287,66 @@ def ensure_edl_mode(adb_info: Optional[Dict[str, Any]] = None) -> bool:
     """
     Otomatisasi transisi ke mode EDL 9008:
     1. Cek apakah sudah dalam mode EDL 9008 (0x05C6:0x9008).
-    2. Jika belum, scan status ADB apakah aktif/terhubung.
-    3. Jika ADB aktif, kirim 'adb reboot edl' otomatis dan pantau sampai QHSUSB__BULK muncul.
+    2. Cek apakah ada SSH OpenWrt aktif (misal IP 192.168.1.1). Jika ada, kirim reboot edl lewat SSH (reboot edl / qcom_reboot).
+    3. Cek ADB jika di mode Android/LK: kirim 'adb reboot edl'.
     """
     found, vid, pid, _ = get_usb_status()
     if found and vid == QUALCOMM_VID and pid == PID_EDL:
         return True
 
+    # 1. Cek apakah perangkat sedang berjalan OpenWrt via SSH
+    probe_ssh = check_ssh_openwrt("192.168.1.1", 22, "root", "")
+    if probe_ssh["reachable"]:
+        log(f"{SYM_ARROW} Modem terdeteksi di mode OpenWrt (SSH 192.168.1.1 aktif).")
+        host = "192.168.1.1"
+        port = 22
+        user = "root"
+        password = ""
+        if not probe_ssh["is_openwrt"]:
+            # Mungkin ada password atau port berbeda
+            try:
+                host_in = input(f"{C_BOLD}{C_WHITE}IP Host OpenWrt [default: 192.168.1.1]: {C_RESET}").strip()
+                if host_in: host = host_in
+                port_in = input(f"{C_BOLD}{C_WHITE}SSH Port [default: 22]: {C_RESET}").strip()
+                if port_in: port = int(port_in)
+                user_in = input(f"{C_BOLD}{C_WHITE}Username [default: root]: {C_RESET}").strip()
+                if user_in: user = user_in
+                password = input(f"{C_BOLD}{C_WHITE}Password [kosongkan jika tanpa password]: {C_RESET}").strip()
+            except (KeyboardInterrupt, EOFError):
+                pass
+
+        log(f"{SYM_ARROW} Mengirim perintah transisi ke mode EDL 9008 via SSH...")
+        # Metode transisi EDL di Linux mainline msm8916:
+        # A: 'reboot edl'
+        # B: sysfs power reset / reboot-mode driver
+        # C: write magic code ke /sys/bus/platform/drivers/qcom,poweroff atau trigger watchdog / LK
+        ssh_cmd = [
+            "ssh", "-p", str(port),
+            "-o", "ConnectTimeout=3",
+            "-o", "StrictHostKeyChecking=no",
+            "-o", "UserKnownHostsFile=/dev/null"
+        ]
+        if password and shutil.which("sshpass"):
+            ssh_cmd = ["sshpass", "-p", password] + ssh_cmd
+
+        edl_payload = (
+            "reboot edl 2>/dev/null || "
+            "echo 1 > /sys/kernel/debug/edl 2>/dev/null || "
+            "reboot -f edl 2>/dev/null || "
+            "reboot bootloader 2>/dev/null || "
+            "reboot -f"
+        )
+        ssh_cmd += [f"{user}@{host}", edl_payload]
+        try:
+            subprocess.run(ssh_cmd, timeout=5)
+        except Exception:
+            pass
+
+        time.sleep(2)
+        if wait_for_edl(timeout_sec=15):
+            return True
+
+    # 2. Cek apakah ada antarmuka ADB
     if adb_info is None:
         adb_info = check_adb_status()
 
@@ -307,8 +360,25 @@ def ensure_edl_mode(adb_info: Optional[Dict[str, Any]] = None) -> bool:
             log(f"{SYM_FAIL} Gagal mengirim adb reboot edl: {e}")
             return False
 
-    log(f"{SYM_FAIL} Device is not in EDL mode and ADB is not detected.")
-    log(f"{SYM_WARN} Use hardware testpoint (D+ to GND) if modem is hard-bricked.")
+    # 3. Cek apakah ada antarmuka Fastboot
+    fb = check_fastboot_status()
+    if fb["device_found"]:
+        log(f"{SYM_ARROW} Modem terdeteksi di Fastboot Mode. Mengirim {C_BOLD}fastboot oem edl{C_RESET} / reboot-edl...")
+        try:
+            subprocess.run([fb["path"], "oem", "edl"], timeout=4)
+        except Exception:
+            try:
+                subprocess.run([fb["path"], "reboot-edl"], timeout=4)
+            except Exception:
+                pass
+        time.sleep(2)
+        if wait_for_edl(timeout_sec=15):
+            return True
+
+    log(f"{SYM_FAIL} Perangkat belum berada di mode EDL 9008.")
+    log(f"{SYM_WARN} Tips masuk EDL 9008:")
+    log(f"      1. Jika sedang di OpenWrt: SSH ke modem lalu jalankan: {C_GREEN}reboot edl{C_RESET}")
+    log(f"      2. Jika stuck/hardbrick: Tahan tombol Reset / short test point D+ ke GND saat colok USB.")
     return False
 
 def run_edl_cmd(cmd_args: List[str]) -> Tuple[int, str]:
@@ -1198,7 +1268,7 @@ def main():
     print(f"{C_BOLD}{C_WHITE}[ QUALCOMM MSM8916 / OPENWRT OPERATIONS MENU ]{C_RESET}")
     print(f"{C_DIM}--- [ DIAGNOSTICS & CONTROL ] ---{C_RESET}")
     print(f"  {C_CYAN}1.{C_RESET} Check Partition Table & eMMC Info (edl printgpt)")
-    print(f"  {C_CYAN}2.{C_RESET} Reboot Modem to EDL 9008 Mode (adb reboot edl)")
+    print(f"  {C_CYAN}2.{C_RESET} Reboot Modem to EDL 9008 Mode (Auto detect: SSH / ADB / Fastboot)")
     print(f"  {C_CYAN}3.{C_RESET} Reboot Modem to Bootloader / Fastboot (adb/ssh reboot bootloader)")
     print(f"  {C_CYAN}4.{C_RESET} Reboot Modem from EDL to Normal Operating Mode (edl reset)")
     print()
