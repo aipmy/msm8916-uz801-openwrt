@@ -383,16 +383,7 @@ def ensure_edl_mode(adb_info: Optional[Dict[str, Any]] = None) -> bool:
 
 def run_edl_cmd(cmd_args: List[str]) -> Tuple[int, str]:
     os.makedirs(os.path.join(EDL_DIR, "logs"), exist_ok=True)
-    # Tambahkan parameter penting untuk eMMC MSM8916:
-    # --sectorsize=512 agar firehose tidak mismatch 4096 vs 512
-    # --maxpayload=1048576 (0x100000) agar payload tidak ditolak
-    extra_flags = []
-    if not any("--sectorsize" in arg for arg in cmd_args):
-        extra_flags.append("--sectorsize=512")
-    if not any("--maxpayload" in arg for arg in cmd_args):
-        extra_flags.append("--maxpayload=1048576")
-
-    full_cmd = [EDL_PYTHON, EDL_PY] + cmd_args + extra_flags
+    full_cmd = [EDL_PYTHON, EDL_PY] + cmd_args
     log(f"{SYM_INFO} Running: {' '.join(full_cmd)}")
 
     # Di terminal interaktif: teruskan stdout/stderr langsung agar '\r' native bekerja sempurna tanpa buffer pipe
@@ -835,13 +826,14 @@ def do_flash_openwrt(loader: str, board_info: Optional[Dict[str, str]] = None, s
     c_rootfs, _ = run_edl_cmd(["w", "system", rootfs_img, f"--loader={loader}", "--memory=eMMC"])
     print(f"{C_GREEN}OK{C_RESET}" if c_rootfs == 0 else f"{C_RED}GAGAL{C_RESET}")
 
-    print(f"      {SYM_ARROW} Erasing overlay data: {C_WHITE}rootfs_data{C_RESET} ...", end=" ", flush=True)
-    c_erase, _ = run_edl_cmd(["e", "rootfs_data", f"--loader={loader}", "--memory=eMMC"])
-    print(f"{C_GREEN}OK{C_RESET}" if c_erase == 0 else f"{C_RED}GAGAL{C_RESET}")
-    if c_erase != 0:
-        log(f"{SYM_WARN} Mencoba erase LBA sektor manual untuk rootfs_data...")
-        # LBA start 610338 s/d akhir disk
-        run_edl_cmd(["es", "610338", "2048", f"--loader={loader}", "--memory=eMMC"])
+    print(f"      {SYM_ARROW} Formatting clean overlay: {C_WHITE}rootfs_data{C_RESET} ...", end=" ", flush=True)
+    # Gunakan zero-fill 1MB sektor awal rootfs_data agar mount overlay lama bersih total
+    with tempfile.NamedTemporaryFile() as zero_tmp:
+        zero_tmp.write(b"\x00" * (1024 * 1024))
+        zero_tmp.flush()
+        # LBA sektor 610338 adalah awal rootfs_data
+        run_edl_cmd(["ws", "610338", zero_tmp.name, f"--loader={loader}", "--memory=eMMC"])
+    print(f"{C_GREEN}OK{C_RESET}")
 
     # 6. Restore Partisi Radio / IMEI
     print()
