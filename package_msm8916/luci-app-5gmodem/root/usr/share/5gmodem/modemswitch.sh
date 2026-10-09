@@ -142,9 +142,16 @@ mm_index_for_path() {
 	for m in $(mmcli -L 2>/dev/null | grep -oE '/Modem/[0-9]+' | grep -oE '[0-9]+$'); do
 		d=$(mmcli -m "$m" -K 2>/dev/null | sed -n 's/^modem\.generic\.device *: *//p' | xargs)
 		case "$d" in */"$1") echo "$m"; return 0 ;; esac
+		pd=$(mmcli -m "$m" -K 2>/dev/null | sed -n 's/^modem\.generic\.physdev *: *//p' | xargs)
+		case "$pd" in */"$1") echo "$m"; return 0 ;; esac
+		if [ "$1" = "4080000.remoteproc" ] || [ "$d" = "qcom-soc" ]; then
+			echo "$m"
+			return 0
+		fi
 	done
 	return 1
 }
+
 
 # cdc-wdm control node of the modem at a usb path
 wdm_for_path() {

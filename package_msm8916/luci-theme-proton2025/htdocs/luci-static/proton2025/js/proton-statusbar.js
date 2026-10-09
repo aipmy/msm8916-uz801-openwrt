@@ -21,7 +21,7 @@
     bar.className = "proton-statusbar-bar";
     bar.innerHTML = `
       <div class="proton-statusbar-inner">
-        <!-- Signal / Operator (Dynamic Ladder Icon) -->
+        <!-- Signal / Operator (Dynamic Ladder Icon - Tanpa Persen Angka) -->
         <a class="proton-status-item" id="sb-sim" href="${window.L ? L.url('admin/modem/5gmodem/detail') : '/cgi-bin/luci/admin/modem/5gmodem/detail'}" title="Cellular Status & Modem">
           <svg class="sb-icon" id="sb-sig-icon" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
             <rect x="2" y="17" width="3.5" height="5" rx="1" opacity="0.3" id="sb-bar-1"></rect>
@@ -30,7 +30,6 @@
             <rect x="18.5" y="5" width="3.5" height="17" rx="1" opacity="0.3" id="sb-bar-4"></rect>
           </svg>
           <span class="sb-label" id="sb-sim-label">INDOSAT 4G</span>
-          <span class="sb-badge" id="sb-sim-sig">--%</span>
         </a>
 
         <!-- SMS -->
@@ -41,7 +40,7 @@
           <span class="sb-badge badge-neutral" id="sb-sms-count">0</span>
         </a>
 
-        <!-- Temperature (Direct to Realtime / Sensors) -->
+        <!-- Temperature (Link to Realtime Temperature) -->
         <a class="proton-status-item" id="sb-temp" href="${window.L ? L.url('admin/status/realtime/temperature') : '/cgi-bin/luci/admin/status/realtime/temperature'}" title="Temperature Sensors">
           <svg class="sb-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"></path>
@@ -117,12 +116,6 @@
         b.style.fill = "currentColor";
       }
     });
-
-    const sigEl = document.getElementById("sb-sim-sig");
-    if (sigEl) {
-      sigEl.textContent = pct > 0 ? `${pct}%` : "--";
-      sigEl.style.color = color;
-    }
   }
 
   function fetchTelemetry() {
@@ -167,15 +160,9 @@
       try { tele = JSON.parse(teleRaw || "{}"); } catch(e) {}
 
       // 1. Update Cellular Signal & Operator Name
-      let oper = "INDOSAT";
-      let mode = "4G";
-      let sig = 70;
-
-      if (metrics && metrics.operator_name && metrics.operator_name !== "-") oper = metrics.operator_name;
-      else if (tele && tele.oper) oper = tele.oper;
-
-      if (metrics && metrics.mode && metrics.mode !== "-") mode = metrics.mode;
-      else if (tele && tele.mode) mode = tele.mode;
+      let oper = (metrics && metrics.operator_name && metrics.operator_name !== "-") ? metrics.operator_name : ((tele && tele.oper) || "INDOSAT");
+      let mode = (metrics && metrics.mode && metrics.mode !== "-") ? metrics.mode : ((tele && tele.mode) || "4G");
+      let sig = 60;
 
       if (metrics && metrics.csq && metrics.csq !== "-") {
         sig = Math.round((parseInt(metrics.csq, 10) * 100) / 31);
@@ -265,6 +252,5 @@
     start();
   }
 
-  // LuCI single-page view change support
   window.addEventListener("luci-loaded", start);
 })();
