@@ -9,6 +9,7 @@ import sys
 import os
 import time
 import shutil
+import socket
 import argparse
 import subprocess
 from datetime import datetime
@@ -59,16 +60,25 @@ KNOWN_COMPOSITES = {
 
 SUPPORTED_BOARDS = {
     "1": {
-        "id": "JZ01-45-V33",
-        "name": "JZ01-45-V33 (4G LTE USB Dongle)",
+        "id": "jz01-45-v33",
+        "name": "Handsome JZ01-45-V33 (2026 Rev / Tri-color LED)",
         "fw_dir": "firmware/output",
+        "prefix": "openwrt-msm89xx-msm8916-jz01-45-v33",
         "backup_dir": "backups/jz01-45-v33"
     },
     "2": {
-        "id": "FY_UZ801_V3.31",
-        "name": "FY_UZ801_V3.31 (Board Lama / FY Classic)",
-        "fw_dir": "firmware/FY_UZ801_V3.31",
-        "backup_dir": "backups/FY_UZ801_V3.31"
+        "id": "generic-uf02",
+        "name": "Generic UF02 (250605 V0S / White Stick)",
+        "fw_dir": "firmware/output",
+        "prefix": "openwrt-msm89xx-msm8916-generic-uf02",
+        "backup_dir": "backups/generic-uf02"
+    },
+    "3": {
+        "id": "yiming-uz801v3",
+        "name": "YiMing UZ801 v3.0 (Classic LTE Stick)",
+        "fw_dir": "firmware/output",
+        "prefix": "openwrt-msm89xx-msm8916-yiming-uz801v3",
+        "backup_dir": "backups/yiming-uz801v3"
     }
 }
 
@@ -79,7 +89,7 @@ def select_board(default_key: str = "1") -> Dict[str, str]:
     for k, v in SUPPORTED_BOARDS.items():
         print(f"  {C_CYAN}{k}.{C_RESET} {v['name']}")
     try:
-        ch = input(f"{C_BOLD}{C_WHITE}Select board [1-2, default={default_key}]: {C_RESET}").strip()
+        ch = input(f"{C_BOLD}{C_WHITE}Select board [1-{len(SUPPORTED_BOARDS)}, default={default_key}]: {C_RESET}").strip()
         if not ch:
             ch = default_key
         return SUPPORTED_BOARDS.get(ch, SUPPORTED_BOARDS["1"])
@@ -145,6 +155,82 @@ def get_usb_status() -> Tuple[bool, Optional[int], Optional[int], str]:
         if found:
             return found, vid, pid, name
     return check_usb_pyusb()
+
+def check_ssh_openwrt(host: str = "192.168.1.1", port: int = 22, user: str = "root", password: str = "") -> Dict[str, Any]:
+    res = {
+        "reachable": False,
+        "is_openwrt": False,
+        "release": "",
+        "model": "",
+        "host": host,
+        "port": port,
+        "user": user,
+        "password": password
+    }
+    
+    # 1. Quick TCP check
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(1.5)
+        s.connect((host, port))
+        s.close()
+        res["reachable"] = True
+    except Exception:
+        return res
+
+    # 2. Probe via ssh
+    ssh_cmd = [
+        "ssh", "-o", "ConnectTimeout=3",
+        "-o", "StrictHostKeyChecking=no",
+        "-o", "UserKnownHostsFile=/dev/null",
+        "-p", str(port)
+    ]
+    if password:
+        # Check if sshpass is available
+        if shutil.which("sshpass"):
+            ssh_cmd = ["sshpass", "-p", password] + ssh_cmd
+        else:
+            ssh_cmd += ["-o", "BatchMode=no"]
+    else:
+        ssh_cmd += ["-o", "BatchMode=yes"]
+
+    ssh_cmd += [f"{user}@{host}", "cat /etc/openwrt_release 2>/dev/null; cat /tmp/sysinfo/model 2>/dev/null"]
+
+    try:
+        proc = subprocess.run(ssh_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=5)
+        if proc.returncode == 0 and "DISTRIB_" in proc.stdout:
+            res["is_openwrt"] = True
+            for line in proc.stdout.splitlines():
+                if "DISTRIB_DESCRIPTION=" in line:
+                    res["release"] = line.split("=", 1)[1].strip("'\"")
+                elif not line.startswith("DISTRIB_") and line.strip():
+                    res["model"] = line.strip()
+    except Exception:
+        pass
+
+    return res
+
+def check_fastboot_status() -> Dict[str, Any]:
+    fb_bin = shutil.which("fastboot") or "/opt/homebrew/bin/fastboot"
+    res = {
+        "installed": os.path.exists(fb_bin),
+        "path": fb_bin,
+        "device_found": False,
+        "serial": None
+    }
+    if not res["installed"]:
+        return res
+    try:
+        proc = subprocess.run([fb_bin, "devices"], stdout=subprocess.PIPE, text=True, timeout=4)
+        for line in proc.stdout.splitlines():
+            parts = line.strip().split()
+            if len(parts) >= 2 and parts[1] == "fastboot":
+                res["device_found"] = True
+                res["serial"] = parts[0]
+                break
+    except Exception:
+        pass
+    return res
 
 def check_adb_status() -> Dict[str, Any]:
     adb_bin = shutil.which("adb") or "/opt/homebrew/bin/adb"
@@ -359,6 +445,169 @@ def do_restore_full(in_file: str, loader: str) -> bool:
         log(f"{SYM_FAIL} {C_RED}Gagal melakukan restore full eMMC.{C_RESET}")
         return False
 
+def do_flash_sysupgrade(board_info: Optional[Dict[str, str]] = None) -> bool:
+    if not board_info:
+        board_info = select_board("1")
+
+    fw_dir = os.path.join(PROJECT_DIR, board_info.get("fw_dir", "firmware/output"))
+    prefix = board_info.get("prefix", "openwrt-msm89xx-msm8916-jz01-45-v33")
+    sysupgrade_bin = os.path.join(fw_dir, f"{prefix}-squashfs-sysupgrade.bin")
+
+    if not os.path.exists(sysupgrade_bin):
+        log(f"{SYM_FAIL} {C_RED}File sysupgrade tidak ditemukan:{C_RESET} {sysupgrade_bin}")
+        return False
+
+    print(f"\n{C_BOLD}{C_WHITE}[ FLASH OPENWRT VIA SSH SYSUPGRADE OVERWRITE ]{C_RESET}")
+    print(f"Target Firmware : {C_CYAN}{os.path.basename(sysupgrade_bin)}{C_RESET}")
+    print(f"Ukuran Image    : {os.path.getsize(sysupgrade_bin) / (1024*1024):.2f} MB\n")
+
+    host = input(f"{C_BOLD}{C_WHITE}Target IP / Host [default: 192.168.1.1]: {C_RESET}").strip() or "192.168.1.1"
+    port_in = input(f"{C_BOLD}{C_WHITE}SSH Port [default: 22]: {C_RESET}").strip() or "22"
+    port = int(port_in)
+    user = input(f"{C_BOLD}{C_WHITE}Username [default: root]: {C_RESET}").strip() or "root"
+    password = input(f"{C_BOLD}{C_WHITE}Password [kosongkan jika tanpa password]: {C_RESET}").strip()
+
+    log(f"{SYM_ARROW} Menguji koneksi SSH ke {user}@{host}:{port}...")
+    probe = check_ssh_openwrt(host=host, port=port, user=user, password=password)
+    if not probe["reachable"]:
+        log(f"{SYM_FAIL} {C_RED}Gagal menghubungi {host}:{port}. Pastikan dongle terhubung dan port terbuka.{C_RESET}")
+        return False
+
+    if probe["is_openwrt"]:
+        log(f"{SYM_OK} {C_GREEN}OpenWrt Terdeteksi:{C_RESET} {probe.get('release', 'OpenWrt')} ({probe.get('model', 'MSM8916')})")
+    else:
+        log(f"{SYM_WARN} Perangkat merespon SSH tapi release OpenWrt belum terverifikasi.")
+
+    reset_cfg = input(f"\n{C_YELLOW}{C_BOLD}Reset konfigurasi lama agar tema Proton & status bar aktif bersih (-n)? (Y/n): {C_RESET}").strip().lower()
+    flag_n = "-n" if reset_cfg not in ["n", "no"] else ""
+
+    confirm = input(f"{C_RED}{C_BOLD}Lanjutkan flashing sysupgrade ke {host}? (y/N): {C_RESET}").strip().lower()
+    if confirm not in ["y", "yes"]:
+        log("Flashing dibatalkan.")
+        return False
+
+    # Upload file ke /tmp
+    log(f"{SYM_ARROW} [1/2] Mengunggah firmware ke /tmp/{os.path.basename(sysupgrade_bin)}...")
+    scp_cmd = [
+        "scp", "-P", str(port),
+        "-o", "StrictHostKeyChecking=no",
+        "-o", "UserKnownHostsFile=/dev/null",
+        sysupgrade_bin, f"{user}@{host}:/tmp/sysupgrade.bin"
+    ]
+    if password and shutil.which("sshpass"):
+        scp_cmd = ["sshpass", "-p", password] + scp_cmd
+
+    res = subprocess.run(scp_cmd)
+    if res.returncode != 0:
+        log(f"{SYM_FAIL} {C_RED}Gagal mengunggah file firmware via SCP.{C_RESET}")
+        return False
+
+    log(f"{SYM_OK} {C_GREEN}Upload berhasil.{C_RESET}")
+    log(f"{SYM_ARROW} [2/2] Menjalankan sysupgrade {flag_n} di perangkat...")
+
+    ssh_run = [
+        "ssh", "-p", str(port),
+        "-o", "StrictHostKeyChecking=no",
+        "-o", "UserKnownHostsFile=/dev/null",
+        f"{user}@{host}",
+        f"sysupgrade {flag_n} /tmp/sysupgrade.bin"
+    ]
+    if password and shutil.which("sshpass"):
+        ssh_run = ["sshpass", "-p", password] + ssh_run
+
+    # sysupgrade akan disconnect SSH saat proses reboot
+    subprocess.Popen(ssh_run)
+    log(f"{SYM_OK} {C_GREEN}Perintah sysupgrade terkirim!{C_RESET}")
+    log(f"{SYM_INFO} Modem sedang menulis partisi eMMC dan akan reboot otomatis.")
+    log(f"{SYM_INFO} Tunggu sekitar 45-60 detik, lalu akses kembali di {C_CYAN}http://{host}{C_RESET}")
+    return True
+
+def do_reboot_bootloader() -> bool:
+    print(f"\n{C_BOLD}{C_WHITE}[ REBOOT MODEM TO BOOTLOADER / FASTBOOT ]{C_RESET}")
+    # 1. Check ADB
+    adb = check_adb_status()
+    if adb["device_found"] and adb["state"] == "device":
+        log(f"{SYM_ARROW} Terdeteksi via ADB. Mengirim {C_BOLD}adb reboot bootloader{C_RESET}...")
+        try:
+            subprocess.run([adb["path"], "reboot", "bootloader"], check=True, timeout=5)
+            log(f"{SYM_OK} {C_GREEN}Perintah reboot bootloader terkirim via ADB.{C_RESET}")
+            return True
+        except Exception as e:
+            log(f"{SYM_FAIL} Gagal adb reboot bootloader: {e}")
+
+    # 2. Check SSH OpenWrt
+    host = input(f"{C_BOLD}{C_WHITE}Target IP [default: 192.168.1.1]: {C_RESET}").strip() or "192.168.1.1"
+    port_in = input(f"{C_BOLD}{C_WHITE}SSH Port [default: 22]: {C_RESET}").strip() or "22"
+    port = int(port_in)
+    user = input(f"{C_BOLD}{C_WHITE}Username [default: root]: {C_RESET}").strip() or "root"
+    password = input(f"{C_BOLD}{C_WHITE}Password [kosongkan jika tanpa password]: {C_RESET}").strip()
+
+    ssh_cmd = [
+        "ssh", "-p", str(port),
+        "-o", "ConnectTimeout=3",
+        "-o", "StrictHostKeyChecking=no",
+        "-o", "UserKnownHostsFile=/dev/null"
+    ]
+    if password and shutil.which("sshpass"):
+        ssh_cmd = ["sshpass", "-p", password] + ssh_cmd
+
+    ssh_cmd += [f"{user}@{host}", "reboot bootloader 2>/dev/null || reboot -f"]
+    log(f"{SYM_ARROW} Mengirim perintah reboot bootloader via SSH ke {user}@{host}...")
+    try:
+        subprocess.run(ssh_cmd, timeout=5)
+        log(f"{SYM_OK} {C_GREEN}Perintah reboot bootloader terkirim via SSH.{C_RESET}")
+        return True
+    except Exception as e:
+        log(f"{SYM_FAIL} Gagal via SSH: {e}")
+        return False
+
+def do_flash_fastboot(board_info: Optional[Dict[str, str]] = None) -> bool:
+    if not board_info:
+        board_info = select_board("1")
+
+    fb = check_fastboot_status()
+    if not fb["device_found"]:
+        log(f"{SYM_FAIL} {C_RED}Perangkat Fastboot tidak terdeteksi.{C_RESET}")
+        log(f"{SYM_INFO} Pastikan dongle sudah di mode bootloader (gunakan opsi menu Reboot to Bootloader).")
+        return False
+
+    fw_dir = os.path.join(PROJECT_DIR, board_info.get("fw_dir", "firmware/output"))
+    prefix = board_info.get("prefix", "openwrt-msm89xx-msm8916-jz01-45-v33")
+    boot_img = os.path.join(fw_dir, f"{prefix}-squashfs-boot.img")
+    sys_img = os.path.join(fw_dir, f"{prefix}-squashfs-system.img")
+    gpt_bin = os.path.join(fw_dir, f"{prefix}-squashfs-gpt_both0.bin")
+
+    for f in [boot_img, sys_img, gpt_bin]:
+        if not os.path.exists(f):
+            log(f"{SYM_FAIL} {C_RED}File tidak ditemukan:{C_RESET} {f}")
+            return False
+
+    print(f"\n{C_BOLD}{C_WHITE}[ FLASHING OPENWRT VIA FASTBOOT ]{C_RESET}")
+    print(f"Board Target    : {C_CYAN}{board_info['name']}{C_RESET}")
+    print(f"Fastboot Serial : {C_WHITE}{fb['serial']}{C_RESET}")
+
+    confirm = input(f"{C_RED}{C_BOLD}Mulai flashing Fastboot sekarang? (y/N): {C_RESET}").strip().lower()
+    if confirm not in ["y", "yes"]:
+        log("Flashing Fastboot dibatalkan.")
+        return False
+
+    fb_bin = fb["path"]
+    log(f"{SYM_ARROW} [1/4] Flashing partition table (GPT)...")
+    subprocess.run([fb_bin, "flash", "partition", gpt_bin], check=True)
+
+    log(f"{SYM_ARROW} [2/4] Menghapus data rootfs lama...")
+    subprocess.run([fb_bin, "erase", "rootfs_data"])
+
+    log(f"{SYM_ARROW} [3/4] Flashing Kernel Boot...")
+    subprocess.run([fb_bin, "flash", "boot", boot_img], check=True)
+
+    log(f"{SYM_ARROW} [4/4] Flashing Rootfs System...")
+    subprocess.run([fb_bin, "flash", "system", sys_img], check=True)
+
+    log(f"{SYM_OK} {C_GREEN}Flashing Fastboot selesai! Melakukan reboot...{C_RESET}")
+    subprocess.run([fb_bin, "reboot"])
+    return True
+
 def do_flash_openwrt(loader: str, board_info: Optional[Dict[str, str]] = None, skip_backup: bool = False) -> bool:
     if not board_info:
         board_info = select_board("1")
@@ -482,12 +731,12 @@ def do_flash_openwrt(loader: str, board_info: Optional[Dict[str, str]] = None, s
     # 5. Flash Kernel & RootFS OpenWrt + Erase rootfs_data
     print()
     log(f"{SYM_ARROW} {C_CYAN}[TAHAP 4/5] Menulis Kernel (boot) & Rootfs OpenWrt...{C_RESET}")
-    print(f"      {SYM_ARROW} Flashing OpenWrt Kernel: {C_WHITE}boot.img{C_RESET} ...", end=" ", flush=True)
+    print(f"      {SYM_ARROW} Flashing OpenWrt Kernel: {C_WHITE}{os.path.basename(boot_img)}{C_RESET} ...", end=" ", flush=True)
     c_boot, _ = run_edl_cmd(["w", "boot", boot_img, f"--loader={loader}", "--memory=eMMC"])
     print(f"{C_GREEN}OK{C_RESET}" if c_boot == 0 else f"{C_RED}GAGAL{C_RESET}")
 
-    print(f"      {SYM_ARROW} Flashing OpenWrt System: {C_WHITE}rootfs.img{C_RESET} ...", end=" ", flush=True)
-    c_rootfs, _ = run_edl_cmd(["w", "rootfs", rootfs_img, f"--loader={loader}", "--memory=eMMC"])
+    print(f"      {SYM_ARROW} Flashing OpenWrt System: {C_WHITE}{os.path.basename(rootfs_img)}{C_RESET} ...", end=" ", flush=True)
+    c_rootfs, _ = run_edl_cmd(["w", "system", rootfs_img, f"--loader={loader}", "--memory=eMMC"])
     print(f"{C_GREEN}OK{C_RESET}" if c_rootfs == 0 else f"{C_RED}GAGAL{C_RESET}")
 
     print(f"      {SYM_ARROW} Erasing overlay data: {C_WHITE}rootfs_data{C_RESET} ...", end=" ", flush=True)
@@ -933,21 +1182,24 @@ def main():
     print(f"{C_DIM}--- [ DIAGNOSTICS & CONTROL ] ---{C_RESET}")
     print(f"  {C_CYAN}1.{C_RESET} Check Partition Table & eMMC Info (edl printgpt)")
     print(f"  {C_CYAN}2.{C_RESET} Reboot Modem to EDL 9008 Mode (adb reboot edl)")
-    print(f"  {C_CYAN}3.{C_RESET} Reboot Modem from EDL to Normal Operating Mode (edl reset)")
+    print(f"  {C_CYAN}3.{C_RESET} Reboot Modem to Bootloader / Fastboot (adb/ssh reboot bootloader)")
+    print(f"  {C_CYAN}4.{C_RESET} Reboot Modem from EDL to Normal Operating Mode (edl reset)")
     print()
     print(f"{C_DIM}--- [ BACKUP & RESCUE ] ---{C_RESET}")
-    print(f"  {C_CYAN}4.{C_RESET} Backup Critical IMEI & EFS Partitions (modemst1, modemst2, fsg, fsc)")
-    print(f"  {C_CYAN}5.{C_RESET} Full eMMC RAW Backup (Single 4GB Binary - edl rf)")
-    print(f"  {C_CYAN}6.{C_RESET} Backup All Individual Partitions + rawprogram0.xml (edl rl --genxml)")
+    print(f"  {C_CYAN}5.{C_RESET} Backup Critical IMEI & EFS Partitions (modemst1, modemst2, fsg, fsc)")
+    print(f"  {C_CYAN}6.{C_RESET} Full eMMC RAW Backup (Single 4GB Binary - edl rf)")
+    print(f"  {C_CYAN}7.{C_RESET} Backup All Individual Partitions + rawprogram0.xml (edl rl --genxml)")
     print()
     print(f"{C_DIM}--- [ FLASHING & RESTORE ] ---{C_RESET}")
-    print(f"  {C_CYAN}7.{C_RESET} Flash OpenWrt Firmware (Kernel, BAM-DMUX Fix, Netdev & SIM Triggers)")
-    print(f"  {C_CYAN}8.{C_RESET} Restore Critical IMEI & EFS Partitions from Backup")
-    print(f"  {C_CYAN}9.{C_RESET} Restore Full eMMC RAW (Write 4GB Image - edl wf)")
+    print(f"  {C_GREEN}8.{C_RESET} {C_BOLD}Flash / Overwrite OpenWrt via SSH (Sysupgrade - 1-Click Online){C_RESET}")
+    print(f"  {C_CYAN}9.{C_RESET} Flash OpenWrt Firmware via Fastboot (Clean Install GPT + Boot + System)")
+    print(f"  {C_CYAN}10.{C_RESET} Flash OpenWrt Firmware via EDL 9008 (Emergency Unbrick / Clean Flash)")
+    print(f"  {C_CYAN}11.{C_RESET} Restore Critical IMEI & EFS Partitions from Backup")
+    print(f"  {C_CYAN}12.{C_RESET} Restore Full eMMC RAW (Write 4GB Image - edl wf)")
     print()
     print(f"{C_DIM}--- [ HARDWARE & DEVICE TREE (DTS) ] ---{C_RESET}")
-    print(f"  {C_CYAN}10.{C_RESET} Check Board Hardware Variant & GPIO LED Mapping")
-    print(f"  {C_CYAN}11.{C_RESET} Patch Device Tree JZ01-45 (LED: R25, G6, B7 | SIM: 22,23,1,52)")
+    print(f"  {C_CYAN}13.{C_RESET} Check Board Hardware Variant & GPIO LED Mapping")
+    print(f"  {C_CYAN}14.{C_RESET} Patch Device Tree JZ01-45 (LED: R25, G6, B7 | SIM: 22,23,1,52)")
     print()
     print(f"  {C_WHITE}0.{C_RESET} Exit")
     print()
@@ -963,7 +1215,7 @@ def main():
         sys.exit(0)
 
     try:
-        pilihan = input(f"{C_BOLD}{C_WHITE}Select operation [0-11]: {C_RESET}").strip()
+        pilihan = input(f"{C_BOLD}{C_WHITE}Select operation [0-14]: {C_RESET}").strip()
     except (KeyboardInterrupt, EOFError):
         print("\nCanceled.")
         sys.exit(0)
@@ -978,27 +1230,35 @@ def main():
         else:
             ensure_edl_mode(adb)
     elif pilihan == "3":
+        do_reboot_bootloader()
+    elif pilihan == "4":
         log(f"{SYM_ARROW} Mengirim perintah reboot normal ke modem via EDL...")
         run_edl_cmd(["reset", f"--loader={args.loader}"])
         log(f"{SYM_OK} {C_GREEN}Modem berhasil di-reboot ke mode operasional normal.{C_RESET}")
-    elif pilihan == "4":
+    elif pilihan == "5":
         if ensure_edl_mode(adb):
             board_sel = select_board("1")
             target_dir = os.path.join(PROJECT_DIR, board_sel["backup_dir"], f"nvram_{timestamp_str}")
             do_backup_nvram(target_dir, args.loader)
-    elif pilihan == "5":
+    elif pilihan == "6":
         if ensure_edl_mode(adb):
             board_sel = select_board("1")
             target_file = os.path.join(PROJECT_DIR, board_sel["backup_dir"], f"full_dump_{timestamp_str}.bin")
             do_backup_full(target_file, args.loader)
-    elif pilihan == "6":
+    elif pilihan == "7":
         if ensure_edl_mode(adb):
             target_dir = os.path.join(BACKUPS_DIR, f"partitions_{timestamp_str}")
             do_backup_partitions(target_dir, args.loader)
-    elif pilihan == "7":
+    elif pilihan == "8":
+        board_sel = select_board("1")
+        do_flash_sysupgrade(board_sel)
+    elif pilihan == "9":
+        board_sel = select_board("1")
+        do_flash_fastboot(board_sel)
+    elif pilihan == "10":
         board_sel = select_board("1")
         print()
-        log(f"{SYM_WARN} {C_YELLOW}PERSIAPAN FLASHING OPENWRT UNTUK: {board_sel['name']}{C_RESET}")
+        log(f"{SYM_WARN} {C_YELLOW}PERSIAPAN FLASHING OPENWRT EDL UNTUK: {board_sel['name']}{C_RESET}")
         
         do_backup = True
         try:
@@ -1014,7 +1274,7 @@ def main():
                 do_flash_openwrt(args.loader, board_sel, skip_backup=(not do_backup))
         else:
             log("Flashing OpenWrt dibatalkan.")
-    elif pilihan == "8":
+    elif pilihan == "11":
         print(f"\n{C_BOLD}{C_WHITE}[ RESTORE PARTISI KRITIS IMEI & EFS ]{C_RESET}")
         board_sel = select_board("1")
         b_dir = os.path.join(PROJECT_DIR, board_sel["backup_dir"])
@@ -1028,7 +1288,7 @@ def main():
                         log(f"{SYM_ARROW} Flashing partisi {part} dari {p_file}...")
                         run_edl_cmd(["w", part, p_file, f"--loader={args.loader}"])
                 log(f"{SYM_OK} {C_GREEN}Restore partisi EFS/IMEI selesai.{C_RESET}")
-    elif pilihan == "9":
+    elif pilihan == "12":
         # Cari file dump yang tersedia di folder backups
         available_bins = []
         if os.path.exists(BACKUPS_DIR):
@@ -1063,10 +1323,10 @@ def main():
                 log("Restore dibatalkan.")
         else:
             log(f"{SYM_FAIL} Path file tidak valid atau tidak ditemukan.")
-    elif pilihan == "10":
+    elif pilihan == "13":
         if ensure_edl_mode(adb):
             do_check_board(args.loader)
-    elif pilihan == "11":
+    elif pilihan == "14":
         if ensure_edl_mode(adb):
             do_patch_board(args.loader)
     else:
