@@ -486,10 +486,12 @@ def do_flash_sysupgrade(board_info: Optional[Dict[str, str]] = None) -> bool:
         log("Flashing dibatalkan.")
         return False
 
-    # Upload file ke /tmp
-    log(f"{SYM_ARROW} [1/2] Mengunggah firmware ke /tmp/{os.path.basename(sysupgrade_bin)}...")
+    # Upload file ke /tmp menggunakan cat over SSH jika scp sftp-server tidak ada
+    log(f"{SYM_ARROW} [1/2] Mengunggah firmware ke /tmp/sysupgrade.bin...")
+    
+    # Coba SCP mode legacy SCP (-O) terlebih dahulu
     scp_cmd = [
-        "scp", "-P", str(port),
+        "scp", "-O", "-P", str(port),
         "-o", "StrictHostKeyChecking=no",
         "-o", "UserKnownHostsFile=/dev/null",
         sysupgrade_bin, f"{user}@{host}:/tmp/sysupgrade.bin"
@@ -499,8 +501,23 @@ def do_flash_sysupgrade(board_info: Optional[Dict[str, str]] = None) -> bool:
 
     res = subprocess.run(scp_cmd)
     if res.returncode != 0:
-        log(f"{SYM_FAIL} {C_RED}Gagal mengunggah file firmware via SCP.{C_RESET}")
-        return False
+        log(f"{SYM_WARN} SCP legacy mode gagal, menggunakan pipe stream langsung: cat over SSH...")
+        ssh_cat_cmd = [
+            "ssh", "-p", str(port),
+            "-o", "StrictHostKeyChecking=no",
+            "-o", "UserKnownHostsFile=/dev/null",
+            f"{user}@{host}",
+            "cat > /tmp/sysupgrade.bin"
+        ]
+        if password and shutil.which("sshpass"):
+            ssh_cat_cmd = ["sshpass", "-p", password] + ssh_cat_cmd
+
+        with open(sysupgrade_bin, "rb") as f_in:
+            res_cat = subprocess.run(ssh_cat_cmd, stdin=f_in)
+        
+        if res_cat.returncode != 0:
+            log(f"{SYM_FAIL} {C_RED}Gagal mengunggah file firmware.{C_RESET}")
+            return False
 
     log(f"{SYM_OK} {C_GREEN}Upload berhasil.{C_RESET}")
     log(f"{SYM_ARROW} [2/2] Menjalankan sysupgrade {flag_n} di perangkat...")
