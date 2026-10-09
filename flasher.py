@@ -823,7 +823,7 @@ def do_flash_openwrt(loader: str, board_info: Optional[Dict[str, str]] = None, s
     print(f"{C_GREEN}OK{C_RESET}" if c_boot == 0 else f"{C_RED}GAGAL{C_RESET}")
 
     print(f"      {SYM_ARROW} Flashing OpenWrt System: {C_WHITE}{os.path.basename(rootfs_img)}{C_RESET} ...", end=" ", flush=True)
-    c_rootfs, _ = run_edl_cmd(["w", "system", rootfs_img, f"--loader={loader}", "--memory=eMMC"])
+    c_rootfs, _ = run_edl_cmd(["w", "rootfs", rootfs_img, f"--loader={loader}", "--memory=eMMC"])
     print(f"{C_GREEN}OK{C_RESET}" if c_rootfs == 0 else f"{C_RED}GAGAL{C_RESET}")
 
     print(f"      {SYM_ARROW} Formatting clean overlay: {C_WHITE}rootfs_data{C_RESET} ...", end=" ", flush=True)

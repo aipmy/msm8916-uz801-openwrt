@@ -21,5 +21,6 @@ sed -i '\|/targets/msm89xx/msm8916/packages|d' /etc/apk/repositories.d/distfeeds
 
 # Set Proton2025 as default LuCI theme
 uci -q set luci.main.mediaurlbase='/luci-static/proton2025' 2>/dev/null || true
+uci -q set luci.themes.Proton2025='/luci-static/proton2025' 2>/dev/null || true
 
 uci commit
