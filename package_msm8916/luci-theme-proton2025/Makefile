@@ -7,6 +7,9 @@ PKG_RELEASE:=1
 LUCI_TITLE:=Proton2025 - Elegant Dark Theme for LuCI
 LUCI_DEPENDS:=+luci-base
 LUCI_PKGARCH:=all
+LUCI_MINIFY_CSS:=0
+LUCI_CSSTIDY:=0
+
 
 define Package/$(PKG_NAME)/conffiles
 /etc/config/proton2025
