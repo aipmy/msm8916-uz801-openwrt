@@ -39,8 +39,16 @@ uci -q set 5gmodem.@5gmodem[0].device='/dev/wwan0at0' 2>/dev/null || true
 uci -q set 5gmodem.@5gmodem[0].at_port='/dev/wwan0at0' 2>/dev/null || true
 uci -q set 5gmodem.@5gmodem[0].iface_proto='modemmanager' 2>/dev/null || true
 uci -q set 5gmodem.@5gmodem[0]._mm_exclude='0' 2>/dev/null || true
+uci -q set 5gmodem.@5gmodem[0].active_modem='4080000.remoteproc' 2>/dev/null || true
+
+# Set SMS and AT ports
+uci -q set 5gmodem.sms.atport='/dev/wwan0at0' 2>/dev/null || true
+uci -q set 5gmodem.sms.readport='/dev/wwan0at0' 2>/dev/null || true
+uci -q set 5gmodem.sms.sendport='/dev/wwan0at0' 2>/dev/null || true
+uci -q set 5gmodem.sms.ussdport='/dev/wwan0at0' 2>/dev/null || true
 
 # Symlink cascade.css fallback for standard LuCI theme loader
+
 
 ln -sf /www/luci-static/proton2025/css/cascade.css /www/luci-static/proton2025/cascade.css 2>/dev/null || true
 

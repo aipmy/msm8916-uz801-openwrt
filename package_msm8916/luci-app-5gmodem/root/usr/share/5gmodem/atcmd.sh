@@ -43,6 +43,9 @@ case "$TMO" in ''|*[!0-9]*) TMO=10 ;; esac
 # бывают и посторонние переходники USB-UART. Спрашивать у них AT незачем, а
 # главное - незачем давать такую возможность из браузера.
 _known=0
+if [ "$PORT" = "/dev/wwan0at0" ] || [ "$PORT" = "/dev/wwan0at1" ] || [ "$PORT" = "mmcli" ]; then
+	_known=1
+fi
 for _t in $("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e '@[*].tty[*]' 2>/dev/null); do
 	[ "$_t" = "$PORT" ] && { _known=1; break; }
 done
@@ -50,6 +53,44 @@ if [ "$_known" != 1 ]; then
 	logger -t 5gmodem "atcmd: port $PORT does not belong to any known modem"
 	echo "unknown port" >&2; exit 2
 fi
+
+# Jika port adalah mmcli atau wwan0at tidak tersedia, jalankan via mmcli atau qmicli
+if [ "$PORT" = "mmcli" ] || [ ! -c "$PORT" ]; then
+	_mi=$(/usr/share/5gmodem/modemswitch.sh mmindex 2>/dev/null)
+	[ -n "$_mi" ] || _mi=any
+	_resp=$(mmcli -m "$_mi" --command="$CMD" 2>&1)
+	_rc=$?
+	if [ $_rc -eq 0 ]; then
+		echo "$_resp"
+		exit 0
+	fi
+	# Fallback untuk modem Snapdragon 410 SoC via QMI
+	if [ -c /dev/wwan0qmi0 ]; then
+		case "$CMD" in
+			"ATI"|"AT+CGMM"|"AT+GMM")
+				qmicli -d /dev/wwan0qmi0 --dms-get-model 2>&1
+				qmicli -d /dev/wwan0qmi0 --dms-get-revision 2>&1
+				exit 0
+				;;
+			"AT+CGSN"|"AT+GSN")
+				qmicli -d /dev/wwan0qmi0 --dms-get-ids 2>&1
+				exit 0
+				;;
+			"AT+CSQ"|"AT+CESQ")
+				qmicli -d /dev/wwan0qmi0 --nas-get-signal-info 2>&1
+				exit 0
+				;;
+			"AT+COPS?")
+				qmicli -d /dev/wwan0qmi0 --nas-get-home-network 2>&1
+				exit 0
+				;;
+		esac
+	fi
+	echo "$_resp"
+	exit $_rc
+fi
+
+
 
 # КОМАНДА ЧЕЛОВЕКА ИДЁТ БЕЗУСЛОВНО.
 #

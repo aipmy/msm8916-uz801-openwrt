@@ -276,7 +276,9 @@ return view.extend({
 	handleGo: function(ev, confirmed) {
 		let atcmd = document.getElementById('cmdvalue').value;
 		let port = uci.get('5gmodem', 'sms', 'atport');
+		if (!port) { port = uci.get('5gmodem', '@5gmodem[0]', 'at_port') || uci.get('5gmodem', '@5gmodem[0]', 'device'); }
 		/* Фолбэк - AT-порт секции АКТИВНОГО модема: у MM-модема (Compal) легаси
+
 		   sms.atport пуст, а рабочий порт в его секции есть - консоль писала
 		   «укажите порт» при живом ttyUSB (поймано владельцем). */
 		if (!port) {

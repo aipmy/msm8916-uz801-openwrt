@@ -119,40 +119,21 @@ for t in /dev/ttyUSB* /dev/ttyACM* /dev/cdc-wdm* /dev/wwan*; do
 	esac
 done
 
-# --- Модемы на шине PCI/MHI (без USB вовсе) ---------------------------------
-#
-# Модуль в M.2-слоте с отрезанным USB (Quectel RM520N-GLAP 17cb:0308, Foxconn
-# T99W175/DW5930e 105b:e0b0, Foxconn T99W373/MV32-W 105b:e0d9) приходит в
-# систему PCI-устройством под mhi-pci-generic, а порты отдаёт классом wwan:
-# /dev/wwan<N>at<M> - AT, /dev/wwan<N>mbim<M> - канал данных. Цикл выше его НЕ
-# ВИДИТ: owner_node поднимается до узла с idVendor, а у PCI-родителя такого
-# файла нет вовсе. Итог был - модем не попадал в список ВООБЩЕ: ни вкладки, ни
-# записи реестра, ни vidpid, а без vidpid страница диапазонов не находила файл
-# профиля modemband и писала «Unsupported» (профили метрик modem/pci/* при этом
-# работали - их ключ строит 5gmodem.sh сам, мимо перечисления).
-# (ревью 13.09.2026)
-#
-# Поднимаемся от порта вверх ДО PCI-устройства, но останавливаемся, если по
-# дороге встретился USB-узел (idVendor): у USB-модема с cdc_mbim wwan-порт тоже
-# есть, он уже найден циклом выше, а слепое восхождение довело бы нас до
-# контроллера xHCI - и в модемы попал бы он.
+# --- Модемы на шине PCI/MHI/Platform (без USB вовсе) ---------------------------------
 for _wpt in /sys/class/wwan/*; do
 	[ -e "$_wpt/device" ] || continue
-	# У класса wwan есть и сам узел устройства (wwan0), и его порты (wwan0at0).
-	# У первого нет /dev - он нам не порт и записи не даёт.
 	_wnode="/dev/${_wpt##*/}"
-	[ -c "$_wnode" ] || continue
+	[ -e "$_wnode" ] || continue
 	_wdev=$(readlink -f "$_wpt/device" 2>/dev/null)
 	_wpci=""
 	while [ -n "$_wdev" ] && [ "$_wdev" != "/" ] && [ "$_wdev" != "/sys" ]; do
 		[ -f "$_wdev/idVendor" ] && break
 		if [ -e "/sys/bus/pci/devices/${_wdev##*/}" ]; then _wpci="$_wdev"; break; fi
 		# Platform bus SoC device (e.g. Qualcomm MSM8916 bam-dmux / remoteproc)
-		if [ -e "/sys/bus/platform/devices/${_wdev##*/}" ]; then _wpci="$_wdev"; break; fi
+		if [ -e "/sys/bus/platform/devices/${_wdev##*/}" ] || [ "${_wdev##*/}" = "4080000.remoteproc" ]; then _wpci="$_wdev"; break; fi
 		_wdev="${_wdev%/*}"
 	done
 	[ -n "$_wpci" ] || continue
-
 
 	idx=""
 	i=1
@@ -164,14 +145,12 @@ for _wpt in /sys/class/wwan/*; do
 		NCNT=$((NCNT + 1)); idx=$NCNT
 		NODES="$NODES $_wpci"
 	fi
-	# AT-порт кладём к последовательным (tty): для потребителей это ровно он -
-	# порт, куда шлют AT. Остальные каналы узла (mbim/qmi) - управляющие, как
-	# cdc-wdm у USB.
 	case "${_wpt##*/}" in
 		*at*) PORTREC="${PORTREC}${idx} tty ${_wnode}${NL}" ;;
 		*)    PORTREC="${PORTREC}${idx} wdm ${_wnode}${NL}" ;;
 	esac
 done
+
 
 # --- Модемы БЕЗ портов (HiLink) ------------------------------------------
 #
@@ -335,7 +314,11 @@ for n in $NODES; do
 		vid="05c6"
 		pid="8916"
 		prod="Qualcomm MSM8916 Modem"
+		[ -z "$ttys" ] && ttys='"\/dev\/wwan0at0"'
 	fi
+	[ "$path" = "4080000.remoteproc" ] && [ -z "$ttys" ] && ttys='"\/dev\/wwan0at0"'
+
+
 
 	prod=$(esc "$(cat "$n/product" 2>/dev/null)")
 	# Порты этого модема - из плоского списка (см. сбор выше). Кавычки для JSON
@@ -352,6 +335,10 @@ for n in $NODES; do
 	done <<PORTREC_EOF
 $PORTREC
 PORTREC_EOF
+	if [ "$path" = "4080000.remoteproc" ] && [ -z "$ttys" ]; then
+		ttys='"/dev/wwan0at0"'
+	fi
+
 	# model - имя, разобранное основным опросом по AT+CGMM (пишется в секцию
 	# модема). Дескриптор product часто бесполезен: "Android" у Quectel EC21,
 	# "SimTech, Incorporated" у SimCom. Читаем из uci (это дёшево), AT здесь не
