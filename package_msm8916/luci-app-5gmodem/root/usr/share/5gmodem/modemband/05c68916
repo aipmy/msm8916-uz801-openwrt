@@ -1,0 +1,62 @@
+# Qualcomm MSM8916 Snapdragon 410 SoC Modem
+_BAND_VIA=mmcli
+_MMIDX=$(/usr/share/5gmodem/modemswitch.sh mmindex 2>/dev/null); [ -n "$_MMIDX" ] || _MMIDX=any
+_DEFAULT_LTE_BANDS="1 2 3 5 7 8 20 40"
+
+getinfo() {
+	echo "Qualcomm Snapdragon MSM8916"
+}
+
+_mm_current_bands() {
+	mmcli -m "$_MMIDX" 2>/dev/null | sed -n 's/.*current:[ \t]*//p' | tr ',' ' '
+}
+
+_mm_other_bands() {
+	prefix="$1"
+	for B in $(_mm_current_bands); do
+		case "$B" in
+			${prefix}*) ;;
+			*) echo "$B";;
+		esac
+	done
+}
+
+_mm_join_pipe() {
+	res=""
+	for x in "$@"; do
+		[ -n "$x" ] && res="${res}${res:+|}$x"
+	done
+	printf '%s' "$res"
+}
+
+getsupportedbands() {
+	echo "$_DEFAULT_LTE_BANDS"
+}
+
+getbands() {
+	for B in $(_mm_current_bands); do
+		case "$B" in
+			eutran-*) echo "${B#eutran-}";;
+		esac
+	done | xargs
+}
+
+setbands() {
+	BANDS="$1"
+	[ "$BANDS" = "default" ] && BANDS="$_DEFAULT_LTE_BANDS"
+
+	NEW_EUTRAN=""
+	for BAND in $BANDS; do
+		case $BAND in
+			''|*[!0-9]*) continue ;;
+		esac
+		NEW_EUTRAN="${NEW_EUTRAN}${NEW_EUTRAN:+|}eutran-${BAND}"
+	done
+	[ -z "$NEW_EUTRAN" ] && return 1
+
+	OTHER=$(_mm_other_bands "eutran-")
+	FULL=$(_mm_join_pipe $OTHER)
+	FULL="${FULL}${FULL:+|}${NEW_EUTRAN}"
+
+	mmcli -m "$_MMIDX" "--set-current-bands=$FULL"
+}

@@ -147,9 +147,12 @@ for _wpt in /sys/class/wwan/*; do
 	while [ -n "$_wdev" ] && [ "$_wdev" != "/" ] && [ "$_wdev" != "/sys" ]; do
 		[ -f "$_wdev/idVendor" ] && break
 		if [ -e "/sys/bus/pci/devices/${_wdev##*/}" ]; then _wpci="$_wdev"; break; fi
+		# Platform bus SoC device (e.g. Qualcomm MSM8916 bam-dmux / remoteproc)
+		if [ -e "/sys/bus/platform/devices/${_wdev##*/}" ]; then _wpci="$_wdev"; break; fi
 		_wdev="${_wdev%/*}"
 	done
 	[ -n "$_wpci" ] || continue
+
 
 	idx=""
 	i=1
@@ -327,6 +330,13 @@ for n in $NODES; do
 		vid=$(cat "$n/vendor" 2>/dev/null); vid="${vid#0x}"
 		pid=$(cat "$n/device" 2>/dev/null); pid="${pid#0x}"
 	fi
+	# Qualcomm Snapdragon SoC Modem fallback
+	if [ -z "$vid" ] && [ "$path" = "4080000.remoteproc" ]; then
+		vid="05c6"
+		pid="8916"
+		prod="Qualcomm MSM8916 Modem"
+	fi
+
 	prod=$(esc "$(cat "$n/product" 2>/dev/null)")
 	# Порты этого модема - из плоского списка (см. сбор выше). Кавычки для JSON
 	# навешиваются здесь же; в путях /dev и именах сетевых устройств кавычек и

@@ -162,8 +162,11 @@
       if (tempEl && tempSensors && Array.isArray(tempSensors.sensors) && tempSensors.sensors.length > 0) {
         let maxTemp = 0;
         tempSensors.sensors.forEach(s => {
-          if (s.temp && s.temp > maxTemp) maxTemp = s.temp;
+          let t = s.temp;
+          if (t && t > 1000) t = t / 1000;
+          if (t && t > maxTemp) maxTemp = t;
         });
+
         if (maxTemp > 0) {
           tempEl.textContent = `${Math.round(maxTemp)}°C`;
           tempEl.className = "sb-badge " + (maxTemp >= 75 ? "badge-danger" : maxTemp >= 60 ? "badge-warning" : "badge-normal");

@@ -386,8 +386,15 @@ trap 'exit 143' INT TERM HUP
 # показывает блок частот с кнопкой) от «убран СОВСЕМ» (ребутить нечего - чистый
 # скелет). Кладём в ответы «модема нет», по нему решает фронт.
 _active_onbus() {
-	[ -n "$_POLL_AM" ] && [ -e "/sys/bus/usb/devices/$_POLL_AM" ] && echo 1 || echo 0
+	if [ -n "$_POLL_AM" ]; then
+		if [ -e "/sys/bus/usb/devices/$_POLL_AM" ] || [ -e "/sys/bus/platform/devices/$_POLL_AM" ] || [ -e "/sys/devices/platform/soc@0/$_POLL_AM" ]; then
+			echo 1
+			return
+		fi
+	fi
+	echo 0
 }
+
 
 # ОДИН ПИШУЩИЙ, МНОГО ЧИТАЮЩИХ.
 #
@@ -838,7 +845,9 @@ if [ -z "$DEVICE" ]; then
 	# а идём дальше: AT-вызовы станут no-op (обёртка sms_tool), а блок mmcli ниже
 	# наполнит карточку. Иначе весь блок Модем висел бы на плейсхолдерах.
 	_amp0_if=$(uci -q get "5gmodem.$_hl_sec.network")
+	[ -z "$_amp0_if" ] && _amp0_if=$(uci -q get "5gmodem.@5gmodem[0].network")
 	if [ "$(uci -q get "network.$_amp0_if.proto" 2>/dev/null)" != modemmanager ]; then
+
 		# САМОЛЕЧЕНИЕ: АКТИВНОГО НЕТ В СПИСКЕ МОДЕМОВ - ЗОВЁМ resolve.
 		#
 		# Переоценку активного делает hotplug, но он срабатывает не всегда: об
