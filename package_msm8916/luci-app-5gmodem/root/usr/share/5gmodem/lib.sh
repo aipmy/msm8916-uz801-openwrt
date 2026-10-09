@@ -734,10 +734,10 @@ active_sec() {
 operator_clean() {
 	case "$1" in
 		*' '[Rr][Uu][Ss]) _oc=${1% *}; [ -n "$_oc" ] && printf '%s' "$_oc" || printf '%s' "$1" ;;
-		[Ii][Nn][Dd]' '*) _oc=${1#* }; [ -n "$_oc" ] && printf '%s' "$_oc" || printf '%s' "$1" ;;
 		*) printf '%s' "$1" ;;
 	esac
 }
+
 
 
 opname_pretty() {

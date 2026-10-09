@@ -166,46 +166,72 @@
       try { tele = JSON.parse(teleRaw || "{}"); } catch(e) {}
 
       // 1. Update Cellular Signal & Operator Name
-      let oper = (metrics && metrics.operator_name && metrics.operator_name !== "-") ? metrics.operator_name : ((tele && tele.oper) || "Indosat Ooredoo");
-      let mode = (metrics && metrics.mode && metrics.mode !== "-") ? metrics.mode : ((tele && tele.mode) || "4G");
-      // Clean up string like "LTE | B3 (1800 MHz)" -> "4G" or "LTE"
+      let oper = "";
+      if (metrics && metrics.operator_name && metrics.operator_name !== "-") {
+        oper = metrics.operator_name;
+      } else if (tele && tele.oper) {
+        oper = tele.oper;
+      }
+
+      let mode = "";
+      if (metrics && metrics.mode && metrics.mode !== "-") {
+        mode = metrics.mode;
+      } else if (tele && tele.mode) {
+        mode = tele.mode;
+      }
       if (mode.indexOf("|") >= 0) mode = mode.split("|")[0].trim();
 
-      let sig = 50;
+      let sig = 0;
       if (metrics && metrics.signal && metrics.signal !== "-" && metrics.signal !== "0") {
         sig = parseInt(metrics.signal, 10);
       } else if (metrics && metrics.csq && metrics.csq !== "-") {
         sig = Math.round((parseInt(metrics.csq, 10) * 100) / 31);
-      } else if (tele && tele.sig) {
-        sig = tele.sig;
+      } else if (tele && tele.sig !== undefined && tele.sig !== null) {
+        sig = parseInt(tele.sig, 10);
       }
+      if (isNaN(sig) || sig < 0) sig = 0;
       if (sig > 100) sig = 100;
 
       const simLabel = document.getElementById("sb-sim-label");
       if (simLabel) {
-        simLabel.textContent = `${oper} (${mode})`;
+        if (oper) {
+          simLabel.textContent = mode ? `${oper} (${mode})` : oper;
+        } else {
+          simLabel.textContent = "--";
+        }
       }
       updateSignalLadder(sig);
 
       // 2. Update SMS
-      let smsCount = (tele && tele.sms !== undefined) ? tele.sms : 0;
+      let smsCount = 0;
+      if (tele && tele.sms !== undefined && tele.sms !== null) {
+        smsCount = tele.sms;
+      }
       const smsEl = document.getElementById("sb-sms-count");
       if (smsEl) smsEl.textContent = smsCount;
 
-      // 3. Update Temperature (Convert mili-degree to °C, link to /realtime/temperature)
-      let curTemp = 47.6;
+      // 3. Update Temperature (Convert mili-degree to °C from kernel sensor)
+      let curTemp = null;
       if (tempRes && tempRes.sensors && tempRes.sensors.length > 0) {
         tempRes.sensors.forEach(s => {
-          let t = s.temp;
-          if (t > 1000) t = t / 1000;
-          if (t > 20 && t < 120) curTemp = t;
+          let t = +s.temp;
+          if (!isNaN(t)) {
+            if (t > 1000) t = t / 1000;
+            if (curTemp === null || t > curTemp) curTemp = t;
+          }
         });
       }
       const tempEl = document.getElementById("sb-temp-val");
-      if (tempEl && curTemp > 0) {
-        tempEl.textContent = `${curTemp.toFixed(1)}°C`;
-        tempEl.className = "sb-badge " + (curTemp >= 75 ? "badge-danger" : curTemp >= 60 ? "badge-warning" : "badge-normal");
+      if (tempEl) {
+        if (curTemp !== null) {
+          tempEl.textContent = `${curTemp.toFixed(1)}°C`;
+          tempEl.className = "sb-badge " + (curTemp >= 75 ? "badge-danger" : curTemp >= 60 ? "badge-warning" : "badge-normal");
+        } else {
+          tempEl.textContent = "--°C";
+          tempEl.className = "sb-badge";
+        }
       }
+
 
       // 4. Update CPU Usage Percentage
       if (cpuStat && cpuStat.total && cpuStat.idle) {
