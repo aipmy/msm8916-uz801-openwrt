@@ -10,7 +10,10 @@ CHANGED=0
 for sec in $(uci -q show network 2>/dev/null | sed -n "s/^network\.\([^.=]*\)\.proto='modemmanager'$/\1/p"); do
 	[ "$(uci -q get "network.$sec.iptype")" = "ipv4v6" ] || continue
 	[ -z "$(uci -q get "network.$sec.init_epsbearer")" ] || continue
+	# Do not force on Qualcomm SoC BAM-DMUX modem (error 81 invalid parameter length)
+	[ "$(uci -q get "network.$sec.device")" = "qcom-soc" ] && continue
 	uci -q set "network.$sec.init_epsbearer=default"
+
 	CHANGED=1
 done
 [ "$CHANGED" = 1 ] && uci -q commit network
