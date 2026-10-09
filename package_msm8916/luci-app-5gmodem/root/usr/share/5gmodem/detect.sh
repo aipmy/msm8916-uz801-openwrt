@@ -256,10 +256,11 @@ fi
 MODEMFILE=/tmp/5gmodem/modem
 touch $MODEMFILE
 DEVICE=$(cat $MODEMFILE)
-if [ -n "$DEVICE" ]; then
+if [ -n "$DEVICE" ] && [ -e "$DEVICE" ]; then
 	echo $DEVICE
 	exit 0
 fi
+
 
 # find any device
 DEVICES=$(find /dev -name "ttyUSB*" -o -name "ttyACM*" -o -name "wwan*at*" | sort -r)

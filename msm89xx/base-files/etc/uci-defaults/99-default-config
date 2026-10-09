@@ -32,7 +32,16 @@ uci -q set network.modem.iptype='ipv4v6' 2>/dev/null || true
 uci -q set luci.main.mediaurlbase='/luci-static/proton2025' 2>/dev/null || true
 uci -q set luci.themes.Proton2025='/luci-static/proton2025' 2>/dev/null || true
 
+# Configure 5gmodem defaults for Snapdragon 410 SoC modem
+uci -q set 5gmodem.@5gmodem[0].auto_port='0' 2>/dev/null || true
+uci -q set 5gmodem.@5gmodem[0].network='modem' 2>/dev/null || true
+uci -q set 5gmodem.@5gmodem[0].device='/dev/wwan0at0' 2>/dev/null || true
+uci -q set 5gmodem.@5gmodem[0].at_port='/dev/wwan0at0' 2>/dev/null || true
+uci -q set 5gmodem.@5gmodem[0].iface_proto='modemmanager' 2>/dev/null || true
+uci -q set 5gmodem.@5gmodem[0]._mm_exclude='0' 2>/dev/null || true
+
 # Symlink cascade.css fallback for standard LuCI theme loader
+
 ln -sf /www/luci-static/proton2025/css/cascade.css /www/luci-static/proton2025/cascade.css 2>/dev/null || true
 
 # Fix permissions on /www and ucode templates
