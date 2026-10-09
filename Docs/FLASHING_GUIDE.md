@@ -25,7 +25,14 @@ All firmware images are pre-compiled and ready to flash without compiling:
 3. **Hardware Pinout & Native Triggers**:
    - Native SIM status and network activity mapping.
    - LuCI-configurable LED triggers directly in Web UI.
-4. **LuCI Modern Web Interface & Modem Suite**:
+4. **Proton Quick Status Bar (Under Topbar)**:
+   - Interactive live status widget bar right beneath the topbar across all Web UI pages:
+     - **SIM Card / Cellular**: Live operator name, connection mode, and signal strength (dBm/%). Clicking opens the **5G/4G Modem** details dashboard.
+     - **SMS**: Unread incoming SMS badge counter. Clicking opens the SMS **Inbox**.
+     - **Temperature**: Live MSM8916 SoC/Modem peak temperatures in °C. Clicking opens the **Temperature Sensors** status page.
+     - **CPU & RAM**: Live CPU Load Average & Memory usage percentage. Clicking navigates to **Processes** and **System Overview**.
+     - **Clients**: Active connected LAN/WiFi devices. Clicking navigates to **DHCP Leases**.
+5. **LuCI Modern Web Interface & Modem Suite**:
    - Default Theme: **Proton 2025** (`luci-theme-proton2025`).
    - Modem Dashboard: **5G/4G Cellular Manager** (`luci-app-5gmodem`).
    - Integrated utilities: `sms-tool`, `comgt`, `qmi-utils`, `mbim-utils`, `modemmanager`.

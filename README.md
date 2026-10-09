@@ -63,7 +63,8 @@ Our standard firmware image is pre-loaded with essential networking, monitoring,
 
 ### 1. Cellular & Modem Stack
 - **ModemManager & libqmi / libmbim**: Automatic connection management for Qualcomm Hexagon QDSP6 modem subsystem (`wwan0`).
-- **5G/4G Modem Status Dashboard**: Real-time signal strength (RSRP, RSRQ, RSSI), cell ID, carrier bands, and SMS inbox manager.
+- **5G/4G Modem Status Dashboard**: Real-time signal strength (RSRP, RSRQ, RSSI), cell ID, carrier bands, and SMS inbox manager (`luci-app-5gmodem`).
+- **Proton Quick Status Bar**: Persistent interactive bar under the topbar displaying SIM/Carrier status, SMS counter, temperature, CPU/RAM, and client count directly on all pages.
 - **BAM-DMUX Traffic Accounting**: In-tree kernel counter fix for real-time RX/TX data metrics.
 
 ### 2. Networking & Diagnostics

@@ -31,6 +31,9 @@
                 ],
                 "luci-rpc": [
                     "getDHCPLeases"
+                ],
+                "5gmodem_sms_forward": [
+                    "forward"
                 ]
             },
             "uci": [

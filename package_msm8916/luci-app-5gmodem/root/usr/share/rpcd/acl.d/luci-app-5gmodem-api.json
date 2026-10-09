@@ -8,7 +8,9 @@
 				"/usr/share/5gmodem/modemswitch.sh active": [ "exec" ],
 				"/usr/share/5gmodem/netpri.sh list": [ "exec" ],
 				"/usr/share/5gmodem/netpri.sh status": [ "exec" ],
-				"/tmp/5gmodem/metrics.json": [ "read" ]
+				"/tmp/5gmodem/metrics.json": [ "read" ],
+				"/tmp/5gmodem/tele.json": [ "read" ],
+				"/tmp/5gmodem/sms_new.json": [ "read" ]
 			},
 			"uci": [ "5gmodem" ]
 		}

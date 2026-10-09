@@ -11225,3 +11225,117 @@ body.login-page .login-password-toggle:focus-visible {
         scroll-behavior: auto !important;
     }
 }
+
+/* ==========================================================================
+   Proton Quick Status Bar (Under Topbar)
+   ========================================================================== */
+.proton-statusbar-bar {
+    width: 100%;
+    background: rgba(20, 27, 34, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--proton-border);
+    padding: 6px 0;
+    z-index: 990;
+}
+
+:root[data-theme="light"] .proton-statusbar-bar {
+    background: rgba(245, 247, 250, 0.9);
+}
+
+.proton-statusbar-inner {
+    max-width: var(--proton-page-max-width, 1200px);
+    margin: 0 auto;
+    padding: 0 var(--proton-page-gutter, 20px);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+}
+
+.proton-status-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--proton-border);
+    border-radius: 6px;
+    font-size: 0.82rem;
+    color: var(--proton-text);
+    text-decoration: none !important;
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+:root[data-theme="light"] .proton-status-item {
+    background: rgba(0, 0, 0, 0.03);
+}
+
+.proton-status-item:hover {
+    background: var(--proton-accent-glow);
+    border-color: var(--proton-accent);
+    color: var(--proton-accent);
+    transform: translateY(-1px);
+}
+
+.proton-status-item .sb-icon {
+    opacity: 0.75;
+    flex-shrink: 0;
+}
+
+.proton-status-item .sb-label {
+    font-weight: 500;
+}
+
+.proton-status-item .sb-badge {
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.sb-badge.badge-normal {
+    background: rgba(46, 204, 113, 0.15);
+    color: #2ecc71;
+}
+
+.sb-badge.badge-warning {
+    background: rgba(243, 156, 18, 0.15);
+    color: #f39c12;
+}
+
+.sb-badge.badge-danger {
+    background: rgba(231, 76, 60, 0.15);
+    color: #e74c3c;
+}
+
+.sb-badge.badge-highlight {
+    background: rgba(52, 152, 219, 0.2);
+    color: #3498db;
+    box-shadow: 0 0 6px rgba(52, 152, 219, 0.4);
+}
+
+.sb-badge.badge-neutral {
+    opacity: 0.7;
+}
+
+@media (max-width: 800px) {
+    .proton-statusbar-bar {
+        padding: 4px 0;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    .proton-statusbar-inner {
+        flex-wrap: nowrap;
+        gap: 8px;
+        padding: 0 12px;
+    }
+    .proton-status-item {
+        padding: 3px 8px;
+        font-size: 0.75rem;
+        white-space: nowrap;
+    }
+}
+
