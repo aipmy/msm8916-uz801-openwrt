@@ -1,0 +1,12 @@
+#!/bin/sh
+# Reload all OpenWrt LED configurations from LuCI (/etc/config/system)
+# whenever any network interface (wwan*, br-lan, phy0*, usb*) is added or up
+case "$ACTION" in
+	add|bind)
+		case "$INTERFACE" in
+			wwan*|br-*|phy*|usb*|wlan*)
+				/etc/init.d/led reload >/dev/null 2>&1 || /etc/init.d/led restart >/dev/null 2>&1
+				;;
+		esac
+		;;
+esac

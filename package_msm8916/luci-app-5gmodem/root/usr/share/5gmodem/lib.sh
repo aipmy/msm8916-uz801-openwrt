@@ -181,7 +181,7 @@ usb_path_present() {   # $1 - usb-путь; код 0 = устройство на
 	# PCI/MHI-модуль (RM520N-GLAP, T99W175 на PCIe) в списке модемов идёт под
 	# путём PCI-устройства; для него USB-проверка всегда «нет на шине», и
 	# автонастройка молча его пропускала. (ревью 13.09.2026)
-	[ -e "/sys/bus/usb/devices/$1" ] || [ -e "/sys/bus/pci/devices/${1##*/}" ]
+	[ -e "/sys/bus/usb/devices/$1" ] || [ -e "/sys/bus/pci/devices/${1##*/}" ] || [ -e "/sys/bus/platform/devices/${1##*/}" ]
 }
 
 purge_path_caches() {   # $1 - usb-путь

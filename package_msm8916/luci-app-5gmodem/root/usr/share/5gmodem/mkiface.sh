@@ -744,7 +744,14 @@ case "$REQ" in
 		case "$DRV" in
 			cdc_mbim) PROTO="mbim" ;;
 			qmi_wwan) PROTO="qmi" ;;
-			*)        PROTO="mbim" ;;
+			bam-dmux|qcom-q6v5-mss|qcom-soc) PROTO="modemmanager" ;;
+			*)
+				if [ "$AMP" = "4080000.remoteproc" ] || [ -e "/sys/bus/platform/devices/4080000.remoteproc" ]; then
+					PROTO="modemmanager"
+				else
+					PROTO="mbim"
+				fi
+				;;
 		esac
 		# vid:pid нужен и Compal-ветке ниже (см. про 05c6:*), и вендорным
 		# исключениям дальше - считаем его один раз здесь.

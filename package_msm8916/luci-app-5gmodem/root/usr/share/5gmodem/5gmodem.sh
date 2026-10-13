@@ -1908,6 +1908,11 @@ _SN_CPORT="${DEVICE:-$_CPORT_MM}"
 # Страна-хвост в имени оператора избыточен ("MegaFon RUS" -> "MegaFon"): чистим
 # текущий и домашний перед выводом. Общая точка для AT и MM.
 COPS=$(operator_clean "$COPS"); HOME_OP=$(operator_clean "$HOME_OP")
+# Jika modem MSM8916 memiliki port AT wwan0at0 dan bukan dikontrol oleh ModemManager
+if [ -e "/dev/wwan0at0" ] && [ "$IFPROTO" != "modemmanager" ] && [ "$_SN_IFPROTO" != "modemmanager" ]; then
+	_raw_cops=$(/usr/bin/sms_tool -d "/dev/wwan0at0" at "AT+COPS?" 2>/dev/null | sed -n 's/.*+COPS: *[0-9]*,[0-9]*,["]\([^"]*\)["][^"]*/\1/p' | head -1)
+	[ -n "$_raw_cops" ] && COPS="$_raw_cops"
+fi
 _sanv _POLL_AM IPADDR IPADDR6 SEC CONN_TIME CT
 _sanv CONN_TIME_SINCE RX TX MODEL _SN_VIDPID TEMP
 _sanv THERM ANTPORTS RXDIV FW PROTO _SN_IFPROTO
@@ -2093,6 +2098,11 @@ if { [ "$_pf_proto" = modemmanager ] || [ -n "$_MM_OWNS" ]; } && [ -z "$REG" ] &
 			home) REG=1 ;;
 			roaming) REG=5 ;;
 		esac
+		_at_p="/dev/wwan0at0"
+		if [ -z "$COPS" ] && [ -e "$_at_p" ] && [ "$_pf_proto" != "modemmanager" ]; then
+			_at_cops=$(sms_tool -d "$_at_p" at "AT+COPS?" 2>/dev/null | awk -F[\"] '/^\+COPS:\s*.,0/ {print $2}')
+			[ -n "$_at_cops" ] && COPS="$_at_cops"
+		fi
 		[ -z "$COPS" ] && COPS=$(_pfv "modem.3gpp.operator-name")
 		# «Порт связи» в карточке: AT-порта у MM-модема нет (DEVICE пуст,
 		# detect молчит - порт у MM), в снимке был прочерк. Честный канал
@@ -3154,10 +3164,19 @@ if { [ "$IFPROTO" = modemmanager ] || [ -n "$_MM_OWNS" ]; } && command -v mmcli 
 		_MK=$(mmcli -m "$_MI" -K 2>/dev/null)
 		_mmv() { _v=$(printf '%s\n' "$_MK" | grep -F "$1 " | head -1 | sed 's/^[^:]*:[[:space:]]*//'); [ "$_v" = "--" ] && _v=""; printf '%s' "$_v"; }
 		_mccmnc="$(_mmv "modem.3gpp.operator-code")"
+		# Ambil string mentah dari AT+COPS? via wwan0at0 jika ada dan bukan modemmanager
+		_at_p="/dev/wwan0at0"
+		if [ -e "$_at_p" ] && [ "$IFPROTO" != "modemmanager" ]; then
+			_at_cops=$(sms_tool -d "$_at_p" at "AT+COPS?" 2>/dev/null | awk -F[\"] '/^\+COPS:\s*.,0/ {print $2}')
+			[ -n "$_at_cops" ] && COPS="$_at_cops"
+		fi
 		[ -z "$COPS" ]    && COPS=$(_mmv "modem.3gpp.operator-name")
 		if [ -z "$COPS" ] && [ -n "$_mccmnc" ]; then
 			_dbop=$(awk -F';' -v k="$_mccmnc" '$1 == k { print $3 }' "$RES/mccmnc.dat" 2>/dev/null | head -1 | tr -d '\r' | xargs)
 			[ -n "$_dbop" ] && COPS="$_dbop"
+		fi
+		if [ -z "$LOC" ] || [ "$LOC" = "-" ]; then
+			[ -n "$_mccmnc" ] && LOC=$(awk -F';' -v k="$_mccmnc" '$1 == k { print $2 }' "$RES/mccmnc.dat" 2>/dev/null | head -1 | tr -d '\r')
 		fi
 
 
@@ -3629,6 +3648,11 @@ op_cache_iface() {
 # оператор и иконка. Дома HOME_OP пуст -> обычный COPS.
 _OPNAME="$COPS"
 [ "$IS_ROAMING" = "1" ] && [ -n "$HOME_OP" ] && _OPNAME="$HOME_OP"
+# Ambil mentah jika ada port AT wwan0at0 dan bukan modemmanager
+if [ -e "/dev/wwan0at0" ] && [ "$IFPROTO" != "modemmanager" ]; then
+	_raw_cops=$(/usr/bin/sms_tool -d "/dev/wwan0at0" at "AT+COPS?" 2>/dev/null | sed -n 's/.*+COPS: *[0-9]*,[0-9]*,["]\([^"]*\)["][^"]*/\1/p' | head -1)
+	[ -n "$_raw_cops" ] && _OPNAME="$_raw_cops"
+fi
 # Тот же страновой хвост, что и в метриках: файл читает «Приоритет интернета»
 # (netpri operator_cached), и без чистки в его карточке оставалось «MegaFon RUS».
 _OPNAME=$(operator_clean "$_OPNAME")

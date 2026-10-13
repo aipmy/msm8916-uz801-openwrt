@@ -589,6 +589,11 @@ operator_probe() {
 		mi=""
 		[ -n "$_op_path" ] && mi=$(/usr/share/5gmodem/modemswitch.sh mmindex "$_op_path" 2>/dev/null)
 		if [ -n "$mi" ]; then
+			_netpri_proto=$(uci -q get "network.$i.proto")
+			if [ -e "/dev/wwan0at0" ] && [ "$_netpri_proto" != "modemmanager" ]; then
+				_at_raw=$(/usr/bin/sms_tool -d "/dev/wwan0at0" at "AT+COPS?" 2>/dev/null | sed -n 's/.*+COPS: *[0-9]*,[0-9]*,["]\([^"]*\)["][^"]*/\1/p' | head -1)
+				[ -n "$_at_raw" ] && { printf '%s' "$_at_raw" > "/tmp/5gmodem/netpri_op_$i"; return; }
+			fi
 			_mk=$(mmcli -m "$mi" -K 2>/dev/null)
 			nm=$(printf '%s\n' "$_mk" | sed -n 's/^modem\.3gpp\.operator-name *: *//p' | head -1)
 			# Тот же последний шаг, что в AT-ветке: mmcli отдаёт имя СЕТИ

@@ -25,7 +25,9 @@ uci -q set wireless.default_radio0.disabled='0' 2>/dev/null || true
 
 # Set initial eps bearer to disabled for Qualcomm SoC BAM-DMUX modem
 uci -q set network.modem.init_epsbearer='disabled' 2>/dev/null || true
-uci -q set network.modem.apn='indosatgprs' 2>/dev/null || true
+uci -q set network.modem.force_connection='0' 2>/dev/null || true
+uci -q set network.modem.force_link='0' 2>/dev/null || true
+uci -q set network.modem.apn='internet' 2>/dev/null || true
 uci -q set network.modem.iptype='ipv4v6' 2>/dev/null || true
 
 # Set Proton2025 as default LuCI theme

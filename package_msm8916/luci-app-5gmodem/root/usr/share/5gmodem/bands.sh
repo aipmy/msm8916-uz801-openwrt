@@ -1841,12 +1841,16 @@ case $1 in
 		#   {"source":"vendor"}             - вести вендорным путём (bands.sh getinfo)
 		_mi_sec="m_$(active_modem | sed 's/[^A-Za-z0-9]/_/g')"
 		_mi_if=$(uci -q get "5gmodem.$_mi_sec.network")
+		[ -n "$_mi_if" ] || _mi_if=$(uci -q get "5gmodem.@5gmodem[0].network")
+		[ -n "$_mi_if" ] || _mi_if="modem"
 		_mi_proto=$(uci -q get "network.$_mi_if.proto")
+		[ -n "$_mi_proto" ] || _mi_proto="modemmanager"
 		if [ "$_mi_proto" != "modemmanager" ] || ! command -v mmcli >/dev/null 2>&1; then
 			echo '{"source":"vendor"}'
 			exit 0
 		fi
 		_mi_idx=$(/usr/share/5gmodem/modemswitch.sh mmindex "$(active_modem)" 2>/dev/null)
+		[ -n "$_mi_idx" ] || _mi_idx="0"
 		_mi_k=""
 		[ -n "$_mi_idx" ] && _mi_k=$(mmcli -m "$_mi_idx" -K 2>/dev/null)
 		if [ -z "$_mi_k" ]; then
@@ -1893,6 +1897,8 @@ case $1 in
 		# или 'default' = авто), $3 - preferred (может быть пуст).
 		_smm_sec="m_$(active_modem | sed 's/[^A-Za-z0-9]/_/g')"
 		_smm_if=$(uci -q get "5gmodem.$_smm_sec.network")
+		[ -n "$_smm_if" ] || _smm_if=$(uci -q get "5gmodem.@5gmodem[0].network")
+		[ -n "$_smm_if" ] || _smm_if="modem"
 		logger -t 5gmodem "setmodemm: allowed='$2' preferred='$3' iface='$_smm_if'"
 		[ -n "$_smm_if" ] || { echo '{"error":"no iface"}'; exit 0; }
 		note_foreign_uci network "bands setmodemm"

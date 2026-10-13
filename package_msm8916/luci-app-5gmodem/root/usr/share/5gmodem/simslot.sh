@@ -531,6 +531,13 @@ if [ -n "$MI" ]; then
 		# DW5821e к MBIM-запросам слотов не пускаем (см. _FRAG выше): без
 		# безопасного AT-порта честно отдаём «слотов не видно».
 		[ -n "$_FRAG" ] && { echo '{"type":"","slots":[],"active":""}'; exit 0; }
+		# ModemManager-модем без разрешённого выделенного AT-порта не опрашиваем
+		# напрямую во избежание коллизий с MM и краха Hexagon DSP (dsatcmdp Port = -1)
+		SLOT_AT_PORT=$(_slot_at_mm)
+		if [ -z "$SLOT_AT_PORT" ]; then
+			echo '{"type":"","slots":[],"active":""}'
+			exit 0
+		fi
 		logger -t 5gmodem "slots: ModemManager did not report them - asking the modem directly"
 		;;
 	esac

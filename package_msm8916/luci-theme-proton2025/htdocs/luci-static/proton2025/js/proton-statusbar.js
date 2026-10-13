@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  const POLL_INTERVAL = 3; // seconds
+  const POLL_INTERVAL = 2; // seconds
   let timerId = null;
   let lastCpuTotal = 0;
   let lastCpuIdle = 0;
@@ -15,6 +15,12 @@
 
     const menubar = document.getElementById("menubar");
     if (!menubar) return;
+
+    // Load cached values from sessionStorage to avoid initial flicker / fallback to '--'
+    let cached = {};
+    try {
+      cached = JSON.parse(sessionStorage.getItem("proton_sb_cache") || "{}");
+    } catch(e) {}
 
     const bar = document.createElement("div");
     bar.id = "proton-statusbar";
@@ -29,7 +35,7 @@
             <rect x="13" y="9" width="3.5" height="13" rx="1" opacity="0.3" id="sb-bar-3"></rect>
             <rect x="18.5" y="5" width="3.5" height="17" rx="1" opacity="0.3" id="sb-bar-4"></rect>
           </svg>
-          <span class="sb-label" id="sb-sim-label">Modem</span>
+          <span class="sb-label" id="sb-sim-label">${cached.sim || 'Modem'}</span>
         </a>
 
         <!-- SMS -->
@@ -37,7 +43,7 @@
           <svg class="sb-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
           </svg>
-          <span class="sb-badge badge-neutral" id="sb-sms-count">0</span>
+          <span class="sb-badge badge-neutral" id="sb-sms-count">${cached.sms || '0'}</span>
         </a>
 
         <!-- Temperature (Link to Realtime Temperature) -->
@@ -45,7 +51,7 @@
           <svg class="sb-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"></path>
           </svg>
-          <span class="sb-badge" id="sb-temp-val">--°C</span>
+          <span class="sb-badge ${cached.tempClass || ''}" id="sb-temp-val">${cached.temp || '--°C'}</span>
         </a>
 
         <!-- CPU Usage % -->
@@ -55,7 +61,7 @@
             <rect x="9" y="9" width="6" height="6"></rect>
             <path d="M9 1v3 M15 1v3 M9 20v3 M15 20v3 M20 9h3 M20 15h3 M1 9h3 M1 15h3"></path>
           </svg>
-          <span class="sb-badge" id="sb-cpu-val">0%</span>
+          <span class="sb-badge ${cached.cpuClass || ''}" id="sb-cpu-val">${cached.cpu || '0%'}</span>
         </a>
 
         <!-- RAM Usage % -->
@@ -63,7 +69,7 @@
           <svg class="sb-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M6 19v-3 M10 19v-3 M14 19v-3 M18 19v-3 M4 11V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v5 M4 11h16v5H4z"></path>
           </svg>
-          <span class="sb-badge" id="sb-ram-val">0%</span>
+          <span class="sb-badge ${cached.ramClass || ''}" id="sb-ram-val">${cached.ram || '0%'}</span>
         </a>
 
         <!-- Clients -->
@@ -74,12 +80,13 @@
             <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
             <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
           </svg>
-          <span class="sb-badge badge-neutral" id="sb-clients-count">0</span>
+          <span class="sb-badge badge-neutral" id="sb-clients-count">${cached.clients || '0'}</span>
         </a>
       </div>
     `;
 
     menubar.appendChild(bar);
+    if (cached.sig !== undefined) updateSignalLadder(cached.sig);
   }
 
   function updateSignalLadder(pct) {
@@ -149,7 +156,7 @@
     const callDHCPLeases = L.rpc.declare({
       object: "luci-rpc",
       method: "getDHCPLeases",
-      expect: { dhcp_leases: [] }
+      expect: { "": {} }
     });
 
     Promise.all([
@@ -260,9 +267,34 @@
       // 6. Update Connected Clients
       const clientsEl = document.getElementById("sb-clients-count");
       if (clientsEl && dhcpRes) {
-        const count = (dhcpRes.dhcp_leases || []).length;
-        clientsEl.textContent = count;
+        let leases = [];
+        if (Array.isArray(dhcpRes.dhcp_leases)) {
+          leases = dhcpRes.dhcp_leases;
+        } else if (Array.isArray(dhcpRes)) {
+          leases = dhcpRes;
+        } else if (dhcpRes.dhcp_leases && typeof dhcpRes.dhcp_leases === "object") {
+          leases = Object.values(dhcpRes.dhcp_leases);
+        }
+        clientsEl.textContent = leases.length;
       }
+
+      // 7. Save current telemetry state to sessionStorage to prevent fallback flicker on page navigation
+      try {
+        const cpuEl = document.getElementById("sb-cpu-val");
+        const ramEl = document.getElementById("sb-ram-val");
+        sessionStorage.setItem("proton_sb_cache", JSON.stringify({
+          sim: simLabel ? simLabel.textContent : "Modem",
+          sig: sig,
+          sms: smsCount,
+          temp: tempEl ? tempEl.textContent : "--°C",
+          tempClass: tempEl ? tempEl.className.replace("sb-badge", "").trim() : "",
+          cpu: cpuEl ? cpuEl.textContent : "0%",
+          cpuClass: cpuEl ? cpuEl.className.replace("sb-badge", "").trim() : "",
+          ram: ramEl ? ramEl.textContent : "0%",
+          ramClass: ramEl ? ramEl.className.replace("sb-badge", "").trim() : "",
+          clients: clientsEl ? clientsEl.textContent : "0"
+        }));
+      } catch(e) {}
     });
   }
 

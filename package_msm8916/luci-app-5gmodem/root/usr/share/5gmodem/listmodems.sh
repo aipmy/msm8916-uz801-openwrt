@@ -423,7 +423,12 @@ PORTREC_EOF
 	# не опрашивает. Пусто, пока модем ни разу не опрашивался.
 	_opname=""
 	_opif=$(uci -q get "5gmodem.$_sec.network" 2>/dev/null)
-	[ -n "$_opif" ] && [ -s "/tmp/5gmodem/op_$_opif" ] && \
+	# Ambil string mentah dari AT+COPS? jika wwan0at0 ada dan bukan dikontrol oleh ModemManager
+	if [ -e "/dev/wwan0at0" ] && [ "$_opif" ] && [ "$(uci -q get "network.$_opif.proto")" != "modemmanager" ]; then
+		_at_raw=$(/usr/bin/sms_tool -d "/dev/wwan0at0" at "AT+COPS?" 2>/dev/null | sed -n 's/.*+COPS: *[0-9]*,[0-9]*,["]\([^"]*\)["][^"]*/\1/p' | head -1)
+		[ -n "$_at_raw" ] && _opname=$(esc "$_at_raw")
+	fi
+	[ -z "$_opname" ] && [ -n "$_opif" ] && [ -s "/tmp/5gmodem/op_$_opif" ] && \
 		_opname=$(esc "$(cat "/tmp/5gmodem/op_$_opif" 2>/dev/null | tr -d '\n')")
 	# ЗАПАСНОЙ ИСТОЧНИК - КЭШ «ПРИОРИТЕТА ИНТЕРНЕТА» (/tmp/5gmodem/netpri_op_<iface>).
 	# У HiLink-модема AT-порта может не быть вовсе, и основной опрос его имя не
