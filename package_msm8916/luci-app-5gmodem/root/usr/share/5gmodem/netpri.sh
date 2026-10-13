@@ -589,6 +589,12 @@ operator_probe() {
 		mi=""
 		[ -n "$_op_path" ] && mi=$(/usr/share/5gmodem/modemswitch.sh mmindex "$_op_path" 2>/dev/null)
 		if [ -n "$mi" ]; then
+			_mi_sim=$(mmcli -m "$mi" -K 2>/dev/null | grep -F "modem.generic.sim " | head -1 | sed 's/^[^:]*:[[:space:]]*//')
+			if [ -n "$_mi_sim" ] && [ "$_mi_sim" != "--" ]; then
+				_sim_op=$(mmcli -i "$_mi_sim" -K 2>/dev/null | grep -F "sim.properties.operator-name " | head -1 | sed 's/^[^:]*:[[:space:]]*//')
+				[ "$_sim_op" = "--" ] && _sim_op=""
+				[ -n "$_sim_op" ] && { printf '%s' "$_sim_op" > "/tmp/5gmodem/netpri_op_$i"; return; }
+			fi
 			_netpri_proto=$(uci -q get "network.$i.proto")
 			if [ -e "/dev/wwan0at0" ] && [ "$_netpri_proto" != "modemmanager" ]; then
 				_at_raw=$(/usr/bin/sms_tool -d "/dev/wwan0at0" at "AT+COPS?" 2>/dev/null | sed -n 's/.*+COPS: *[0-9]*,[0-9]*,["]\([^"]*\)["][^"]*/\1/p' | head -1)

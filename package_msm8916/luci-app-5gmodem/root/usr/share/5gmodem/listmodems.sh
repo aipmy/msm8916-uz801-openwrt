@@ -423,6 +423,17 @@ PORTREC_EOF
 	# не опрашивает. Пусто, пока модем ни разу не опрашивался.
 	_opname=""
 	_opif=$(uci -q get "5gmodem.$_sec.network" 2>/dev/null)
+	# Ambil nama operator mentah dari SIM card via ModemManager jika dikontrol MM
+	if [ -n "$_opif" ] && [ "$(uci -q get "network.$_opif.proto")" = "modemmanager" ]; then
+		_lm_mi=$(/usr/share/5gmodem/modemswitch.sh mmindex "$_sec" 2>/dev/null)
+		[ -n "$_lm_mi" ] || _lm_mi="any"
+		_lm_sim=$(mmcli -m "$_lm_mi" -K 2>/dev/null | grep -F "modem.generic.sim " | head -1 | sed 's/^[^:]*:[[:space:]]*//')
+		if [ -n "$_lm_sim" ] && [ "$_lm_sim" != "--" ]; then
+			_sim_op=$(mmcli -i "$_lm_sim" -K 2>/dev/null | grep -F "sim.properties.operator-name " | head -1 | sed 's/^[^:]*:[[:space:]]*//')
+			[ "$_sim_op" = "--" ] && _sim_op=""
+			[ -n "$_sim_op" ] && _opname=$(esc "$_sim_op")
+		fi
+	fi
 	# Ambil string mentah dari AT+COPS? jika wwan0at0 ada dan bukan dikontrol oleh ModemManager
 	if [ -e "/dev/wwan0at0" ] && [ "$_opif" ] && [ "$(uci -q get "network.$_opif.proto")" != "modemmanager" ]; then
 		_at_raw=$(/usr/bin/sms_tool -d "/dev/wwan0at0" at "AT+COPS?" 2>/dev/null | sed -n 's/.*+COPS: *[0-9]*,[0-9]*,["]\([^"]*\)["][^"]*/\1/p' | head -1)

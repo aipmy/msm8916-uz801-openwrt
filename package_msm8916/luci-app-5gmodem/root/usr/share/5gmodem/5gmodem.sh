@@ -2099,6 +2099,12 @@ if { [ "$_pf_proto" = modemmanager ] || [ -n "$_MM_OWNS" ]; } && [ -z "$REG" ] &
 			roaming) REG=5 ;;
 		esac
 		_at_p="/dev/wwan0at0"
+		_sim_path=$(_pfv "modem.generic.sim")
+		if [ -n "$_sim_path" ] && [ "$_sim_path" != "--" ]; then
+			_sim_op=$(mmcli -i "$_sim_path" -K 2>/dev/null | grep -F "sim.properties.operator-name " | head -1 | sed 's/^[^:]*:[[:space:]]*//')
+			[ "$_sim_op" = "--" ] && _sim_op=""
+			[ -n "$_sim_op" ] && COPS="$_sim_op"
+		fi
 		if [ -z "$COPS" ] && [ -e "$_at_p" ] && [ "$_pf_proto" != "modemmanager" ]; then
 			_at_cops=$(sms_tool -d "$_at_p" at "AT+COPS?" 2>/dev/null | awk -F[\"] '/^\+COPS:\s*.,0/ {print $2}')
 			[ -n "$_at_cops" ] && COPS="$_at_cops"
@@ -3164,13 +3170,13 @@ if { [ "$IFPROTO" = modemmanager ] || [ -n "$_MM_OWNS" ]; } && command -v mmcli 
 		_MK=$(mmcli -m "$_MI" -K 2>/dev/null)
 		_mmv() { _v=$(printf '%s\n' "$_MK" | grep -F "$1 " | head -1 | sed 's/^[^:]*:[[:space:]]*//'); [ "$_v" = "--" ] && _v=""; printf '%s' "$_v"; }
 		_mccmnc="$(_mmv "modem.3gpp.operator-code")"
-		# Ambil string mentah dari AT+COPS? via wwan0at0 jika ada dan bukan modemmanager
-		_at_p="/dev/wwan0at0"
-		if [ -e "$_at_p" ] && [ "$IFPROTO" != "modemmanager" ]; then
-			_at_cops=$(sms_tool -d "$_at_p" at "AT+COPS?" 2>/dev/null | awk -F[\"] '/^\+COPS:\s*.,0/ {print $2}')
-			[ -n "$_at_cops" ] && COPS="$_at_cops"
+		_sim_path=$(_mmv "modem.generic.sim")
+		if [ -n "$_sim_path" ] && [ "$_sim_path" != "--" ]; then
+			_sim_op=$(mmcli -i "$_sim_path" -K 2>/dev/null | grep -F "sim.properties.operator-name " | head -1 | sed 's/^[^:]*:[[:space:]]*//')
+			[ "$_sim_op" = "--" ] && _sim_op=""
+			[ -n "$_sim_op" ] && COPS="$_sim_op"
 		fi
-		[ -z "$COPS" ]    && COPS=$(_mmv "modem.3gpp.operator-name")
+		[ -z "$COPS" ] && COPS=$(_mmv "modem.3gpp.operator-name")
 		if [ -z "$COPS" ] && [ -n "$_mccmnc" ]; then
 			_dbop=$(awk -F';' -v k="$_mccmnc" '$1 == k { print $3 }' "$RES/mccmnc.dat" 2>/dev/null | head -1 | tr -d '\r' | xargs)
 			[ -n "$_dbop" ] && COPS="$_dbop"
