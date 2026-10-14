@@ -1,0 +1,82 @@
+#!/bin/sh
+set -e
+
+DIAG_NV="/usr/sbin/diag_nv"
+QMICLI="/usr/bin/qmicli"
+QMI_DEV="/dev/wwan0qmi0"
+
+decode_imei() {
+    raw="$1"
+    echo "$raw" | awk '{
+        hex = $0;
+        gsub(/[^0-9a-fA-F]/, "", hex);
+        if (length(hex) < 18) { print "Invalid/Empty"; exit; }
+        d1  = substr(hex, 3, 1);
+        d2  = substr(hex, 6, 1); d3  = substr(hex, 5, 1);
+        d4  = substr(hex, 8, 1); d5  = substr(hex, 7, 1);
+        d6  = substr(hex, 10, 1); d7  = substr(hex, 9, 1);
+        d8  = substr(hex, 12, 1); d9  = substr(hex, 11, 1);
+        d10 = substr(hex, 14, 1); d11 = substr(hex, 13, 1);
+        d12 = substr(hex, 16, 1); d13 = substr(hex, 15, 1);
+        d14 = substr(hex, 18, 1); d15 = substr(hex, 17, 1);
+        print d1 d2 d3 d4 d5 d6 d7 d8 d9 d10 d11 d12 d13 d14 d15;
+    }'
+}
+
+encode_imei() {
+    imei="$1"
+    echo "$imei" | awk '{
+        split($1, d, "");
+        print "08" d[1] "a" d[3] d[2] d[5] d[4] d[7] d[6] d[9] d[8] d[11] d[10] d[13] d[12] d[15] d[14];
+    }'
+}
+
+if [ -z "$1" ]; then
+    echo "============================================="
+    echo "   Qualcomm Snapdragon 410 (MSM8916) IMEI   "
+    echo "============================================="
+    raw=$($DIAG_NV read 550 2>/dev/null | grep -E '^0000' | awk '{print $2 $3 $4 $5 $6 $7 $8 $9 $10}' || true)
+    current=$(decode_imei "$raw")
+    qmi_imei=$($QMICLI -p -d "$QMI_DEV" --dms-get-ids 2>/dev/null | grep "IMEI:" | awk -F"'" '{print $2}' || true)
+    echo "NVRAM IMEI  : $current"
+    [ -n "$qmi_imei" ] && echo "Active Modem: $qmi_imei"
+    echo ""
+    echo "Cara Ganti: change-imei <15-digit-IMEI-baru>"
+    echo "Contoh    : change-imei 356029830353461"
+    exit 0
+fi
+
+NEW_IMEI="$1"
+if ! echo "$NEW_IMEI" | grep -q -E '^[0-9]{15}$'; then
+    echo "[-] Error: IMEI harus tepat 15 digit angka (diterima: '$NEW_IMEI')"
+    exit 1
+fi
+
+HEX=$(encode_imei "$NEW_IMEI")
+echo "[*] [1/4] Menulis IMEI baru ke Qualcomm NVRAM: $NEW_IMEI (hex: $HEX)..."
+$DIAG_NV write 550 "$HEX" >/dev/null
+
+raw_check=$($DIAG_NV read 550 2>/dev/null | grep -E '^0000' | awk '{print $2 $3 $4 $5 $6 $7 $8 $9 $10}' || true)
+verified=$(decode_imei "$raw_check")
+
+if [ "$verified" != "$NEW_IMEI" ]; then
+    echo "[-] ERROR: Gagal verifikasi readback NVRAM (terbaca: '$verified', diharapkan: '$NEW_IMEI')"
+    exit 1
+fi
+
+echo "[+] [2/4] Verifikasi readback NVRAM sukses!"
+
+echo "[*] [3/4] Melakukan sync EFS & cycle radio..."
+$QMICLI -p -d "$QMI_DEV" --dms-set-operating-mode=low-power >/dev/null 2>&1 || true
+sleep 1
+$QMICLI -p -d "$QMI_DEV" --dms-set-operating-mode=online >/dev/null 2>&1 || true
+
+echo "[*] [4/4] Me-refresh ModemManager..."
+/etc/init.d/modemmanager restart >/dev/null 2>&1
+sleep 3
+
+active_imei=$($QMICLI -p -d "$QMI_DEV" --dms-get-ids 2>/dev/null | grep "IMEI:" | awk -F"'" '{print $2}' || true)
+echo "============================================="
+echo "[+] SELESAI 100%! IMEI BERHASIL DIGANTI."
+echo "    IMEI Aktif di Modem: $active_imei"
+echo "============================================="
